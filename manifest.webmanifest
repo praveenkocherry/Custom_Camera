@@ -1,6 +1,6 @@
 {
   "name": "Custom Camera",
-  "short_name": "Camera",
+  "short_name": "Custom Camera",
   "description": "Photo, video, document scan and QR reader that saves straight to Google Drive.",
   "start_url": "./",
   "scope": "./",
