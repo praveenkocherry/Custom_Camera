@@ -764,10 +764,11 @@
   /* ---------- onboarding: install first, then connect Drive ---------- */
   let deferredInstall = null;
   const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-  const needInstall = () => !isStandalone() && localStorage.getItem('cc_installed') !== '1' && !sessionStorage.getItem('cc_skip_install');
+  try { localStorage.removeItem('cc_installed'); } catch { }
+  const needInstall = () => !isStandalone() && !sessionStorage.getItem('cc_skip_install');
   const needConnect = () => !Drive.connected() && !sessionStorage.getItem('cc_skip_drive');
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; renderOnboard(); });
-  window.addEventListener('appinstalled', () => { localStorage.setItem('cc_installed', '1'); deferredInstall = null; toast('Installed'); renderOnboard(); });
+  window.addEventListener('appinstalled', () => { deferredInstall = null; toast('Installed. Open it from your home screen'); renderOnboard(); });
 
   function renderOnboard() {
     const step = needInstall() ? 'install' : needConnect() ? 'connect' : null;
@@ -793,7 +794,6 @@
       deferredInstall.prompt();
       const r = await deferredInstall.userChoice.catch(() => ({}));
       deferredInstall = null;
-      if (r.outcome === 'accepted') localStorage.setItem('cc_installed', '1');
       renderOnboard();
     } else connectDrive();
   });
