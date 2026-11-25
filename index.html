@@ -14,6 +14,33 @@
 </head>
 <body data-mode="photo">
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-flash" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="i-flip" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14-4M4 4v4h4M4 13a8 8 0 0 0 14 4M20 20v-4h-4"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4 4 0 0 1-.5-8A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-8-4.6-8-10.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 2.5C20 15.4 12 20 12 20z"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 17v4M17 19h4"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 8"/></symbol>
+  <symbol id="i-select" viewBox="0 0 24 24"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h9"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></symbol>
+  <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M4 12h16"/></symbol>
+  <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></symbol>
+  <symbol id="i-speaker" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+</svg>
+
 <div id="app">
   <video id="viewfinder" autoplay muted playsinline></video>
   <canvas id="overlay"></canvas>
@@ -22,19 +49,18 @@
   <div id="flash"></div>
 
   <header id="top">
-    <nav id="tabs" role="tablist" style="--i:0">
-      <span id="pill"></span>
-      <button role="tab" data-mode="photo">Photo</button>
-      <button role="tab" data-mode="video">Video</button>
-      <button role="tab" data-mode="scan">Scan</button>
-      <button role="tab" data-mode="qr">QR</button>
-    </nav>
-    <button id="cloud" class="chip" data-state="off" aria-label="Google Drive status">
-      <span class="dot"></span><span id="cloudText">Connect</span>
-    </button>
+    <nav id="strip" aria-label="Modes"><div id="stripTrack"></div></nav>
+    <div id="tools">
+      <button id="flashBtn" class="tool" aria-label="Flash" title="Flash"><svg class="ic rot"><use href="#i-flash"/></svg></button>
+      <button id="flipBtn" class="tool" aria-label="Switch camera" title="Switch camera"><svg class="ic rot"><use href="#i-flip"/></svg></button>
+      <button id="themeBtn" class="tool" aria-label="Light or dark" title="Light or dark"><svg class="ic rot"><use id="themeUse" href="#i-sun"/></svg></button>
+      <button id="keyBtn" class="tool" aria-label="AI keys" title="AI keys"><svg class="ic rot"><use href="#i-key"/></svg></button>
+      <button id="cloud" class="tool" data-state="off" aria-label="Google Drive status" title="Google Drive"><svg class="ic rot"><use href="#i-cloud"/></svg><span class="dot"></span></button>
+    </div>
   </header>
 
   <div id="recChip" hidden><span class="rdot"></span><span id="chipTime">00:00</span></div>
+  <div id="zoomChip"></div>
   <div id="hint"></div>
 
   <div id="camError" hidden>
@@ -45,61 +71,113 @@
     </div>
   </div>
 
+  <div id="opts">
+    <button id="stampChip" class="chip" data-for="photo" aria-label="Date stamp"><svg class="ic sm"><use href="#i-check"/></svg><span id="stampTxt">Date stamp</span></button>
+    <div id="fmtSeg" class="seg" data-for="scan">
+      <button data-fmt="image" aria-label="Save scans as images"><svg class="ic sm"><use href="#i-image"/></svg>Image</button>
+      <button data-fmt="pdf" aria-label="Combine scans into a PDF"><svg class="ic sm"><use href="#i-pdf"/></svg>PDF</button>
+    </div>
+    <button id="undoChip" class="chip" data-for="scan" hidden aria-label="Remove last page"><svg class="ic sm"><use href="#i-back"/></svg>Undo page</button>
+  </div>
+
   <footer id="bottom">
-    <button id="thumb" aria-label="Open gallery">
+    <button id="thumb" aria-label="Open gallery" title="Gallery">
       <img id="thumbImg" alt="">
-      <svg class="ph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 8"/></svg>
+      <svg class="ic ph"><use href="#i-image"/></svg>
     </button>
 
     <div id="action">
-      <div id="actPhoto" class="hintpill">
-        <b>Tap</b> to focus<span class="sep"></span><b>Double-tap</b> to capture
+      <div class="mui" data-m="photo">
+        <button id="shutterBtn" class="big" aria-label="Take photo"><svg class="ic"><use href="#i-camera"/></svg><span>Take photo</span></button>
       </div>
 
-      <button id="recBtn" class="bigbtn" aria-label="Record video">
-        <span class="rdot big"></span>
-        <span id="recLabel">Start recording</span>
-        <span id="recTime"></span>
-      </button>
+      <div class="mui" data-m="video">
+        <button id="recBtn" class="big" aria-label="Record video">
+          <span class="rdot big"></span>
+          <span id="recLabel">Start recording</span>
+          <span id="recTime"></span>
+        </button>
+      </div>
 
-      <button id="scanBtn" class="bigbtn" aria-label="Scan document">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M4 12h16"/></svg>
-        <span>Scan document</span>
-      </button>
+      <div class="mui" data-m="scan">
+        <button id="scanBtn" class="big" aria-label="Scan page"><svg class="ic"><use href="#i-scan"/></svg><span>Scan page</span></button>
+        <button id="doneBtn" class="big sq" aria-label="Finish PDF" hidden><svg class="ic"><use href="#i-check"/></svg><b id="pageCount">0</b></button>
+      </div>
 
-      <button id="qrPick" class="bigbtn" aria-label="Choose a QR image from gallery">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 8"/></svg>
-        <span>Read QR from a photo</span>
-      </button>
-      <input id="qrFile" type="file" accept="image/*" hidden>
+      <div class="mui" data-m="text">
+        <button id="textBtn" class="big" aria-label="Capture text"><svg class="ic"><use href="#i-text"/></svg><span>Capture text</span></button>
+      </div>
+
+      <div class="mui" data-m="read">
+        <button id="readBtn" class="big" aria-label="Read to me"><svg class="ic" id="readIc"><use href="#i-speaker"/></svg><span id="readLabel">Read to me</span></button>
+        <button id="askBtn" class="big sq alt" aria-label="Ask a question by voice" hidden><svg class="ic"><use href="#i-mic"/></svg></button>
+      </div>
+
+      <div class="mui" data-m="qr">
+        <button id="qrPick" class="big alt" aria-label="Read a QR from a photo"><svg class="ic"><use href="#i-image"/></svg><span>QR from a photo</span></button>
+        <input id="qrFile" type="file" accept="image/*" hidden>
+      </div>
     </div>
   </footer>
 </div>
 
 <section id="gallery" hidden>
   <header class="gh">
-    <button id="galBack" class="ib" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
-    <h1>Gallery</h1>
-    <button id="galRefresh" class="ib" aria-label="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+    <button id="galBack" class="ib" aria-label="Back"><svg class="ic"><use href="#i-back"/></svg></button>
+    <h1 id="galTitle">Gallery</h1>
+    <button id="galSelect" class="ib" aria-label="Select several"><svg class="ic"><use href="#i-select"/></svg></button>
+    <button id="galRefresh" class="ib" aria-label="Refresh"><svg class="ic"><use href="#i-refresh"/></svg></button>
   </header>
   <nav id="galTabs">
     <button data-sec="all" class="on">All</button>
+    <button data-sec="fav">Favourites</button>
     <button data-sec="photo">Photos</button>
     <button data-sec="video">Videos</button>
     <button data-sec="scan">Scans</button>
+    <button data-sec="text">Texts</button>
     <button data-sec="qr">QR</button>
   </nav>
   <div id="galBody"></div>
+  <div id="selBar" hidden>
+    <button id="selCancel" class="ib" aria-label="Cancel selection"><svg class="ic"><use href="#i-close"/></svg></button>
+    <span id="selCount">0 selected</span>
+    <button id="selShare" class="ib" aria-label="Share selected"><svg class="ic"><use href="#i-share"/></svg></button>
+    <button id="selDel" class="ib" aria-label="Delete selected"><svg class="ic"><use href="#i-trash"/></svg></button>
+  </div>
 </section>
 
 <section id="viewer" hidden>
   <header class="vh">
-    <button id="vClose" class="ib" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <button id="vClose" class="ib" aria-label="Back"><svg class="ic"><use href="#i-back"/></svg></button>
     <div class="vt"><div id="vTitle"></div><div id="vSub"></div></div>
-    <button id="vShare" class="ib" aria-label="Share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg></button>
-    <button id="vDel" class="ib" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg></button>
+    <button id="vFav" class="ib" aria-label="Favourite"><svg class="ic"><use href="#i-heart"/></svg></button>
+    <button id="vShare" class="ib" aria-label="Share"><svg class="ic"><use href="#i-share"/></svg></button>
+    <button id="vDel" class="ib" aria-label="Delete"><svg class="ic"><use href="#i-trash"/></svg></button>
   </header>
   <div id="vStage"></div>
+  <div id="vBar" hidden>
+    <button id="vEnhance" class="big alt" hidden aria-label="Enhance photo"><svg class="ic"><use href="#i-sparkle"/></svg><span>Enhance</span></button>
+    <button id="vCopy" class="big alt" hidden aria-label="Copy text"><svg class="ic"><use href="#i-copy"/></svg><span>Copy text</span></button>
+    <button id="vPdf" class="big alt" hidden aria-label="Open PDF"><svg class="ic"><use href="#i-pdf"/></svg><span>Open PDF</span></button>
+  </div>
+  <div id="enhBar" hidden>
+    <button id="enhNew" class="big" aria-label="Save as new"><span>Save as new</span></button>
+    <button id="enhOver" class="big alt" aria-label="Overwrite"><span>Overwrite</span></button>
+    <button id="enhCancel" class="ghost">Cancel</button>
+  </div>
+</section>
+
+<section id="keys" hidden>
+  <header class="gh">
+    <button id="keysBack" class="ib" aria-label="Back"><svg class="ic"><use href="#i-back"/></svg></button>
+    <h1><svg class="ic inl"><use href="#i-key"/></svg></h1>
+  </header>
+  <div class="kadd">
+    <input id="keyInput" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste a Google AI key" aria-label="Google AI key">
+    <button id="keySave" class="ib sol" aria-label="Save key"><svg class="ic"><use href="#i-check"/></svg></button>
+  </div>
+  <div id="keyList"></div>
+  <p class="kfoot">Keys stay on this phone. With several keys, each request uses the next one, and a failing key is skipped.</p>
 </section>
 
 <section id="onboard" hidden>
@@ -118,6 +196,17 @@
     <div id="qrText"></div>
     <button id="qrCopy" class="primary">Copy</button>
     <button id="qrClose" class="ghost">Close</button>
+  </div>
+</section>
+
+<section id="textSheet" hidden>
+  <div class="sheet">
+    <img id="textPrev" alt="">
+    <div class="row2">
+      <button id="textCopy" class="primary"><svg class="ic sm"><use href="#i-copy"/></svg>Copy</button>
+      <button id="textShare" class="primary alt"><svg class="ic sm"><use href="#i-share"/></svg>Share</button>
+    </div>
+    <button id="textClose" class="ghost">Done</button>
   </div>
 </section>
 
