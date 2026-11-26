@@ -3,7 +3,7 @@
   const CFG = window.CC_CONFIG || {};
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const MODES = ['photo', 'video', 'scan', 'text', 'read', 'qr'];
+  const MODES = ['photo', 'video', 'scan', 'text', 'qr', 'read'];
   const LABELS = { photo: 'Photo', video: 'Video', scan: 'Scan', text: 'Text', read: 'Read', qr: 'QR' };
   const KINDS = ['photo', 'video', 'scan', 'text'];
   const ROOT = 'Custom Camera';
@@ -762,6 +762,21 @@
     throw err || new Error('ai');
   }
   const why = e => (e && (e.detail || e.message)) || 'unknown';
+  function explain(e) {
+    const d = why(e);
+    if (/No internet/i.test(d)) return 'There is no internet connection.';
+    if (/^400/.test(d) && /key/i.test(d)) return 'Your AI key is not valid. Please check it on the key screen.';
+    if (/^403/.test(d)) return 'Google refused this key. It may be restricted, or the Gemini service is not allowed for it.';
+    if (/^429/.test(d)) return 'The AI is busy, or the free limit is used up. Please wait a minute and try again.';
+    if (/^5\d\d/.test(d)) return 'Google AI is having trouble right now. Please try again shortly.';
+    if (/Unreadable|nothing to say/i.test(d)) return 'The AI answered in a form I could not understand. Please try again.';
+    return 'Something went wrong: ' + d;
+  }
+  function showError(e, speakIt = true) {
+    const msg = explain(e);
+    $('#errMsg').textContent = msg; $('#errRaw').textContent = why(e); $('#errBox').hidden = false;
+    if (speakIt) { try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(msg); u.lang = navigator.language || 'en-IN'; speechSynthesis.speak(u); } catch { } }
+  }
   async function aiImage(blob) {
     const b = await createImageBitmap(blob);
     const s = Math.min(1, 1400 / Math.max(b.width, b.height));
@@ -788,7 +803,7 @@
     if (a.includes(v)) return toast('Already saved');
     a.push(v); Keys.set(a); $('#keyInput').value = ''; renderKeys(); toast('Saved. Checking the key…', 10000);
     try { await aiCall(v, [{ text: 'Reply with this JSON: {"ok":true}' }]); toast('Key works'); }
-    catch (e) { toast('Key saved, but it failed: ' + why(e), 9000); }
+    catch (e) { toast('Key saved, but it failed', 4000); showError(e); }
   }
 
   /* ---------- Text mode ---------- */
@@ -869,7 +884,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
       $('#textPrev').src = URL.createObjectURL(prev);
       $('#textSheet').hidden = false; pushLayer('text');
       toast(asLabel ? 'Label saved' : 'PDF saved');
-    } catch (e) { console.warn(e); if (e.message !== 'nokey') toast('Could not read that: ' + why(e), 8000); }
+    } catch (e) { console.warn(e); if (e.message !== 'nokey') showError(e); }
     setBusy(false);
   }
 
@@ -909,7 +924,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
       const sp = d.speech || d.text || d.description || ''; if (!sp) throw new Error('The AI sent back nothing to say');
       readCtx.last = sp; $('#askBtn').hidden = false;
       speak(sp, d.lang);
-    } catch (e) { console.warn(e); if (e.message !== 'nokey') { say('Sorry, I could not read that. Please try again.'); setTimeout(() => toast('Reason: ' + why(e), 9000), 400); } }
+    } catch (e) { console.warn(e); if (e.message !== 'nokey') showError(e); }
     setBusy(false);
   }
   function listen() {
@@ -933,7 +948,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
       const d = await gemini([{ text: ASK_PROMPT + `\nWhat you told them before: ${readCtx.last}\nTheir question: ${q}` }, imgPart(readCtx.b64)]);
       const sp = d.speech || d.text || ''; if (!sp) throw new Error('Nothing to say');
       readCtx.last = sp; speak(sp, d.lang);
-    } catch (e) { say('Sorry, I could not answer that.'); setTimeout(() => toast('Reason: ' + why(e), 9000), 400); }
+    } catch (e) { showError(e); }
     setBusy(false);
   }
 
@@ -1299,6 +1314,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
   $('#scanBtn').addEventListener('click', scanCapture);
   $('#doneBtn').addEventListener('click', finishPdf);
   $('#undoChip').addEventListener('click', () => { pages.pop(); paintPages(); toast('Last page removed'); });
+  $('#errClose').addEventListener('click', () => { $('#errBox').hidden = true; try { speechSynthesis.cancel(); } catch { } });
   $('#textBtn').addEventListener('click', textCapture);
   $('#readBtn').addEventListener('click', readCapture);
   $('#askBtn').addEventListener('click', askQuestion);
@@ -1334,7 +1350,18 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     clearTimeout(selArm); selArm = 0; b.classList.remove('arm');
     try { for (const it of its) await trashItem(it); saveCache(); gal.sel = null; renderGallery(); paintSel(); updateCloudChip(); toast('Deleted'); } catch (e) { toast('Could not delete some items'); }
   });
-  $$('#galTabs button').forEach(b => b.addEventListener('click', () => { gal.section = b.dataset.sec; renderGallery(); $('#galBody').scrollTop = 0; }));
+  const SECS = ['all', 'fav', 'photo', 'video', 'scan', 'text', 'qr'];
+  function setSection(sec) {
+    gal.section = sec; renderGallery(); $('#galBody').scrollTop = 0;
+    const b = $(`#galTabs button[data-sec="${sec}"]`); if (b) b.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  }
+  $$('#galTabs button').forEach(b => b.addEventListener('click', () => setSection(b.dataset.sec)));
+  let gs = null;
+  $('#gallery').addEventListener('touchstart', e => { gs = e.touches.length === 1 && !gal.sel ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }, { passive: true });
+  $('#gallery').addEventListener('touchend', e => {
+    if (!gs) return; const t = e.changedTouches[0], dx = t.clientX - gs.x, dy = t.clientY - gs.y; gs = null;
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) { const i = SECS.indexOf(gal.section) + (dx < 0 ? 1 : -1); if (i >= 0 && i < SECS.length) setSection(SECS[i]); }
+  });
   $('#vFav').addEventListener('click', () => { const it = gal.view[view.i]; if (it) toggleFav(it); });
   $('#vShare').addEventListener('click', onShare);
   $('#vDel').addEventListener('click', onDelete);
