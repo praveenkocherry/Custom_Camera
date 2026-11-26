@@ -248,9 +248,10 @@
     const name = `${PREFIX[kind]}_${stamp()}.${extFor(blob.type)}`;
     await idb.add('queue', { kind, name, blob, created: Date.now(), fav: false, desc: extra.desc || '' });
     if (thumb) { await idb.put('thumbs', thumb, name); await idb.put('thumbs', thumb, '__latest'); setLatest(thumb); }
-    updateCloudChip(); flushQueue();
+    pulseThumb(); updateCloudChip(); flushQueue();
     return name;
   }
+  function pulseThumb() { const t = $('#thumb'); t.classList.remove('pulse'); void t.offsetWidth; t.classList.add('pulse'); }
   let latestURL = null;
   function setLatest(blob) {
     if (latestURL) URL.revokeObjectURL(latestURL);
@@ -436,6 +437,7 @@
     try {
       const { blob } = await captureImage({ withStamp: stampOn() });
       await saveItem('photo', blob, await thumbOf(blob));
+      toast('Saved', 1600);
     } catch (e) { console.error(e); toast('Could not take the photo'); }
     setBusy(false);
   }
