@@ -212,20 +212,29 @@
   const isAuthErr = e => /auth|popup|interaction|access_denied|not configured|401|403/i.test(String(e && e.message));
 
   /* ---------- upload queue ---------- */
-  let flushing = false;
+  let flushing = false, flushAgain = false, reauthArmed = false;
+  function armReauth() {
+    if (reauthArmed) return; reauthArmed = true;
+    document.addEventListener('pointerup', async () => {
+      reauthArmed = false;
+      try { await Drive.getToken(true); needReconnect = false; flushQueue(); } catch { }
+      updateCloudChip();
+    }, { once: true, capture: true });
+  }
   async function flushQueue() {
-    if (flushing || !navigator.onLine || !Drive.connected()) return;
-    flushing = true;
+    if (flushing) { flushAgain = true; return; }
+    if (!navigator.onLine || !Drive.connected()) return;
+    flushing = true; let total = 0;
     try {
-      const items = await idb.all('queue');
-      for (const it of items) {
-        await Drive.upload(it.kind, it.name, it.blob, { desc: it.desc, fav: it.fav });
-        await idb.del('queue', it.id);
-      }
-      if (items.length) { toast(items.length === 1 ? 'Saved to Drive' : items.length + ' files saved to Drive'); if (!$('#gallery').hidden) loadGallery(); }
+      do {
+        flushAgain = false;
+        const items = await idb.all('queue');
+        for (const it of items) { await Drive.upload(it.kind, it.name, it.blob, { desc: it.desc, fav: it.fav }); await idb.del('queue', it.id); total++; }
+      } while (flushAgain);
+      if (total) { toast(total === 1 ? 'Saved to Drive' : total + ' files saved to Drive'); if (!$('#gallery').hidden) loadGallery(); }
     } catch (e) {
       console.warn('upload', e);
-      if (isAuthErr(e)) needReconnect = true;
+      if (isAuthErr(e)) { needReconnect = true; armReauth(); }
     } finally { flushing = false; updateCloudChip(); }
   }
   async function updateCloudChip() {
@@ -407,25 +416,23 @@
     } catch { }
   }
 
-  /* one still, upright, optionally stamped */
-  async function captureImage({ withStamp = false } = {}) {
-    const digital = zoomMode === 'digital' && zoom > 1.01;
-    let blob = null, bmp = null;
-    if (!digital && imageCapture) { try { blob = await imageCapture.takePhoto(photoOpts || undefined); } catch { } }
-    let src, sw, sh;
-    if (blob) { bmp = await createImageBitmap(blob); src = bmp; sw = bmp.width; sh = bmp.height; }
-    else { src = vf; sw = vf.videoWidth; sh = vf.videoHeight; }
-    if (!blob || rot !== 0 || withStamp || digital) {
-      let crop = null;
-      if (digital) { const w = sw / zoom, hh = sh / zoom; crop = { x: (sw - w) / 2, y: (sh - hh) / 2, w, h: hh }; }
-      const c = drawRot(src, sw, sh, rot, crop);
-      if (withStamp) stampDate(c);
-      if (bmp && bmp.close) bmp.close();
-      return { blob: await toBlob(c, 'image/jpeg', 0.93), canvas: c };
-    }
-    if (bmp && bmp.close) bmp.close();
-    return { blob, canvas: null };
+  /* grab: instant. develop: rotate and stamp, can run in the background */
+  async function grab({ fast = false } = {}) {
+    const digital = zoomMode === 'digital' && zoom > 1.01, r = rot;
+    if (!fast && !digital && imageCapture) { try { return { blob: await imageCapture.takePhoto(photoOpts || undefined), rot: r }; } catch { } }
+    const sw = vf.videoWidth, sh = vf.videoHeight; let crop = null;
+    if (digital) { const w = sw / zoom, hh = sh / zoom; crop = { x: (sw - w) / 2, y: (sh - hh) / 2, w, h: hh }; }
+    return { canvas: drawRot(vf, sw, sh, r, crop), rot: r };
   }
+  async function develop(raw, { withStamp = false } = {}) {
+    if (raw.canvas) { if (withStamp) stampDate(raw.canvas); return toBlob(raw.canvas, 'image/jpeg', 0.93); }
+    if (raw.rot !== 0 || withStamp) {
+      const bmp = await createImageBitmap(raw.blob); const c = drawRot(bmp, bmp.width, bmp.height, raw.rot); if (bmp.close) bmp.close();
+      if (withStamp) stampDate(c); return toBlob(c, 'image/jpeg', 0.93);
+    }
+    return raw.blob;
+  }
+  async function captureImage(o = {}) { const raw = await grab(o); return { blob: await develop(raw, o) }; }
   async function thumbOf(blob) { const b = await createImageBitmap(blob); const t = await makeThumb(b); if (b.close) b.close(); return t; }
 
   /* ---------- photo ---------- */
@@ -434,12 +441,15 @@
   async function capturePhoto() {
     if (busy || !track) return;
     setBusy(true); flashScreen(); click();
+    try { setLatest(await makeThumb(drawRot(vf, vf.videoWidth, vf.videoHeight, rot))); pulseThumb(); } catch { }
+    let raw;
+    try { raw = await grab(); } catch (e) { console.error(e); toast('Could not take the photo'); setBusy(false); return; }
+    setBusy(false);
     try {
-      const { blob } = await captureImage({ withStamp: stampOn() });
+      const blob = await develop(raw, { withStamp: stampOn() });
       await saveItem('photo', blob, await thumbOf(blob));
       toast('Saved', 1600);
-    } catch (e) { console.error(e); toast('Could not take the photo'); }
-    setBusy(false);
+    } catch (e) { console.error(e); toast('Could not save the photo'); }
   }
 
   /* ---------- video ---------- */
@@ -466,8 +476,7 @@
   }
   async function startRec() {
     if (!track || !stream) return;
-    try { micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
-    catch { micStream = null; toast('Microphone is blocked, recording without sound'); }
+    if (!micStream) { try { micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); } catch { micStream = null; toast('Microphone is blocked, recording without sound'); } }
     const vt = rot !== 0 ? rotatedVideoTracks(rot) : stream.getVideoTracks();
     const ms = new MediaStream([...vt, ...(micStream ? micStream.getAudioTracks() : [])]);
     recMime = pickMime();
@@ -485,6 +494,7 @@
     paintRec();
   }
   function cleanupMic() { if (micStream) micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  async function warmMic() { if (micStream || rec || mode !== 'video') return; try { micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); } catch { } }
   function finishRec(fromPop = false) {
     if (!rec || rec.state === 'inactive') return;
     try { recThumb = drawRot(vf, vf.videoWidth, vf.videoHeight, rot); } catch { recThumb = null; }
@@ -496,7 +506,7 @@
     clearInterval(recTimer); clearInterval(canvasTimer);
     const base = ((rec && rec.mimeType) || recMime || 'video/webm').split(';')[0];
     const blob = new Blob(recChunks, { type: base });
-    recChunks = []; rec = null; cleanupMic(); paintRec();
+    recChunks = []; rec = null; cleanupMic(); paintRec(); warmMic();
     if (blob.size < 2000) return;
     let th = null;
     try { if (recThumb) th = await makeThumb(recThumb); } catch { }
@@ -668,7 +678,7 @@
     if (busy || !track) return;
     setBusy(true); flashScreen(); click();
     try {
-      const { blob: raw } = await captureImage();
+      const { blob: raw } = await captureImage({ fast: true });
       const r = await processScan(raw);
       const kb = Math.round(r.blob.size / 1024);
       if (scanFmt() === 'pdf') {
@@ -869,7 +879,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     if (busy || !track || needKey()) return;
     setBusy(true); flashScreen(); click(); toast('Reading…', 20000);
     try {
-      const { blob } = await captureImage();
+      const { blob } = await captureImage({ fast: true });
       const d = await gemini([{ text: TEXT_PROMPT }, imgPart(await aiImage(blob))]);
       const plain = (d.fields && d.fields.length ? d.fields.map(f => `${f.label}: ${f.value}`).join('\n') : (d.text || '')).trim();
       if (!plain && !d.text) throw new Error('empty');
@@ -1060,7 +1070,9 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     if (rec) finishRec();
     if (mode === 'scan' && pages.length) finishPdf();
     if (mode === 'read') stopLive();
+    if (mode === 'video' && !rec) cleanupMic();
     mode = m; document.body.dataset.mode = m;
+    if (m === 'video') warmMic();
     paintStrip(); stopLoops(); startLoops(); showHint(HINTS[m]);
   }
   const stepMode = d => { const i = MODES.indexOf(mode) + d; if (i >= 0 && i < MODES.length) setMode(MODES[i]); };
@@ -1109,7 +1121,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     gal.loading = true; renderGallery();
     let remote = [], ok = false;
     if (Drive.connected() && navigator.onLine) {
-      try { for (const k of KINDS) remote.push(...await Drive.list(k)); ok = true; }
+      try { (await Promise.all(KINDS.map(k => Drive.list(k)))).forEach(l => remote.push(...l)); ok = true; }
       catch (e) { console.warn(e); if (isAuthErr(e)) { needReconnect = true; updateCloudChip(); toast('Tap the cloud icon to reconnect'); } }
     }
     if (!ok) remote = cachedList;
@@ -1207,7 +1219,8 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     const it = gal.view[view.i]; if (!it) return;
     const stage = $('#vStage');
     if (view.url) URL.revokeObjectURL(view.url); view.url = null; view.blob = null; view.enh = null;
-    stage.replaceChildren(h('div', { class: 'spin' }));
+    if (it.kind === 'video') stage.replaceChildren(h('div', { class: 'spin' }));
+    else { const pv = h('img', { class: 'pv', alt: '' }); loadThumb(it, pv, 800); stage.replaceChildren(pv, h('div', { class: 'spin sm' })); }
     $('#vTitle').textContent = fmtDate(it.created);
     $('#vSub').textContent = it.pending ? 'Waiting to upload' : it.name;
     paintViewerBar(it);
@@ -1218,6 +1231,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
       if (it.kind === 'video') stage.replaceChildren(h('video', { src: view.url, controls: '', playsinline: '', autoplay: '' }));
       else if (it.mime === 'application/pdf') { const im = h('img', { class: 'pdfprev', alt: 'PDF preview' }); loadThumb(it, im, 1000); stage.replaceChildren(im); }
       else stage.replaceChildren(h('img', { src: view.url, alt: '' }));
+      [view.i + 1, view.i - 1].forEach(n => { const nx = gal.view[n]; if (nx && !nx.pending && nx.kind !== 'video' && !mediaCache.has(nx.id)) mediaBlob(nx).catch(() => { }); });
     } catch (e) { stage.replaceChildren(h('div', { class: 'empty', text: 'Could not load. Check your connection.' })); }
   }
   function stepViewer(d) {
@@ -1444,7 +1458,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
   addEventListener('online', flushQueue);
   addEventListener('pagehide', () => { finishRec(true); if (pages.length) finishPdf(); });
   document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'hidden') { finishRec(true); if (pages.length) finishPdf(); stopLive(); stopLoops(); setTimeout(() => { if (document.visibilityState === 'hidden') stopCamera(); }, 800); }
+    if (document.visibilityState === 'hidden') { finishRec(true); if (!rec) cleanupMic(); if (pages.length) finishPdf(); stopLive(); stopLoops(); setTimeout(() => { if (document.visibilityState === 'hidden') stopCamera(); }, 800); }
     else { if (!stream) { if (await startCamera()) startLoops(); } flushQueue(); }
   });
 
@@ -1461,5 +1475,6 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     if (Drive.configured()) Drive.init().catch(() => { });
     if (await startCamera()) { showHint(HINTS.photo); startLoops(); }
     flushQueue();
+    setTimeout(() => { if (!(navigator.connection && navigator.connection.saveData)) loadCV().catch(() => { }); }, 5000);
   })();
 })();

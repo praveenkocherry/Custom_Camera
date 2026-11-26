@@ -194,3 +194,6 @@ body.speaking #readBtn { background: rgba(14,14,16,.82); }
 #errMsg { font-size: 22px; font-weight: 700; line-height: 1.35; margin-bottom: 8px; }
 #errRaw { font-size: 14px; color: #6b6a60; margin-bottom: 14px; word-break: break-word; }
 #errBox .primary.alt { color: var(--ev); border-color: var(--ev); height: 56px; }
+
+#vStage img.pv { filter: blur(8px); transform: scale(1.02); }
+.spin.sm { position: absolute; width: 28px; height: 28px; right: 18px; bottom: 110px; }
