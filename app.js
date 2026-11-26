@@ -12,7 +12,7 @@
   const SCOPE = 'https://www.googleapis.com/auth/drive.file';
   const CV_URL = 'https://docs.opencv.org/4.9.0/opencv.js';
   const JSQR_URL = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-  const AI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent';
+  const AI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
   const store = {
     get: (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } },
     set: (k, v) => { try { localStorage.setItem(k, v); } catch { } },
@@ -722,34 +722,52 @@
     get() { try { const a = JSON.parse(store.get('cc_keys', '[]')); return Array.isArray(a) ? a : []; } catch { return []; } },
     set(a) { store.set('cc_keys', JSON.stringify(a)); },
   };
-  let keyIdx = 0;
-  async function gemini(parts) {
-    const keys = Keys.get();
-    if (!keys.length) { openKeys(); throw new Error('nokey'); }
-    let last = null;
-    for (let i = 0; i < keys.length; i++) {
-      const k = keys[(keyIdx + i) % keys.length];
+  let keyIdx = 0, aiModel = store.get('cc_model', '');
+  const MODELS = ['gemini-flash-latest', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.1-flash-lite'];
+  async function aiCall(key, parts) {
+    const order = [...(aiModel ? [aiModel] : []), ...MODELS.filter(m => m !== aiModel)];
+    let detail = '';
+    for (const m of order) {
+      let r;
       try {
-        const r = await fetch(AI_URL, {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': k },
+        r = await fetch(AI_BASE + m + ':generateContent', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
           body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.2 } })
         });
-        if (!r.ok) { last = new Error('ai ' + r.status); continue; }
+      } catch { const e = new Error('net'); e.detail = 'No internet connection'; e.fatal = true; throw e; }
+      if (!r.ok) {
+        let msg = ''; try { msg = (await r.json()).error.message || ''; } catch { }
+        detail = (r.status + ' ' + msg).slice(0, 140);
+        if (r.status === 404 || (r.status === 400 && /model/i.test(msg))) continue;
+        const e = new Error('ai'); e.detail = detail; throw e;
+      }
+      try {
         const j = await r.json();
         const t = (j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts || []).map(p => p.text || '').join('');
         const out = JSON.parse(t.replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim());
-        keyIdx = (keyIdx + i + 1) % keys.length;
+        aiModel = m; store.set('cc_model', m);
         return out;
-      } catch (e) { last = e; }
+      } catch { detail = 'Unreadable answer from the AI'; }
     }
-    throw last || new Error('ai');
+    const e = new Error('ai'); e.detail = detail || 'No AI model available'; throw e;
   }
+  async function gemini(parts) {
+    const keys = Keys.get();
+    if (!keys.length) { openKeys(); throw new Error('nokey'); }
+    let err = null;
+    for (let i = 0; i < keys.length; i++) {
+      try { const out = await aiCall(keys[(keyIdx + i) % keys.length], parts); keyIdx = (keyIdx + i + 1) % keys.length; return out; }
+      catch (e) { err = e; if (e.fatal) break; }
+    }
+    throw err || new Error('ai');
+  }
+  const why = e => (e && (e.detail || e.message)) || 'unknown';
   async function aiImage(blob) {
     const b = await createImageBitmap(blob);
-    const s = Math.min(1, 1800 / Math.max(b.width, b.height));
+    const s = Math.min(1, 1400 / Math.max(b.width, b.height));
     const c = document.createElement('canvas'); c.width = Math.round(b.width * s); c.height = Math.round(b.height * s);
     c.getContext('2d').drawImage(b, 0, 0, c.width, c.height); if (b.close) b.close();
-    return blobToB64(await toBlob(c, 'image/jpeg', 0.85));
+    return blobToB64(await toBlob(c, 'image/jpeg', 0.8));
   }
   const imgPart = b64 => ({ inlineData: { mimeType: 'image/jpeg', data: b64 } });
   function needKey() { if (Keys.get().length) return false; toast('Add your Google AI key first'); openKeys(); return true; }
@@ -763,12 +781,14 @@
       h('button', { class: 'ib', 'aria-label': 'Copy key', onclick: async () => { try { await navigator.clipboard.writeText(k); toast('Copied'); } catch { toast('Could not copy'); } } }, icon('i-copy')),
       h('button', { class: 'ib', 'aria-label': 'Delete key', onclick: () => { const a = Keys.get(); a.splice(i, 1); Keys.set(a); renderKeys(); toast('Key removed'); } }, icon('i-trash')))));
   }
-  function saveKey() {
+  async function saveKey() {
     const v = $('#keyInput').value.trim();
     if (v.length < 20) return toast('That does not look like a key');
     const a = Keys.get();
     if (a.includes(v)) return toast('Already saved');
-    a.push(v); Keys.set(a); $('#keyInput').value = ''; renderKeys(); toast('Saved');
+    a.push(v); Keys.set(a); $('#keyInput').value = ''; renderKeys(); toast('Saved. Checking the key…', 10000);
+    try { await aiCall(v, [{ text: 'Reply with this JSON: {"ok":true}' }]); toast('Key works'); }
+    catch (e) { toast('Key saved, but it failed: ' + why(e), 9000); }
   }
 
   /* ---------- Text mode ---------- */
@@ -827,7 +847,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
       x.fillText(l, M, y); y += l ? LH : LH * 0.6;
     }
     out.push(c);
-    return Promise.all(out.map(async cv2 => { const b = await toBlob(cv2, 'image/jpeg', 0.82); return { blob: b, w: cv2.width, h: cv2.height }; }));
+    return Promise.all(out.map(async cv2 => { const b = await toBlob(cv2, 'image/jpeg', 0.6); return { blob: b, w: cv2.width, h: cv2.height }; }));
   }
   let lastText = null;
   async function textCapture() {
@@ -849,7 +869,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
       $('#textPrev').src = URL.createObjectURL(prev);
       $('#textSheet').hidden = false; pushLayer('text');
       toast(asLabel ? 'Label saved' : 'PDF saved');
-    } catch (e) { console.warn(e); if (e.message !== 'nokey') toast('Could not read that. Check your key and connection.'); }
+    } catch (e) { console.warn(e); if (e.message !== 'nokey') toast('Could not read that: ' + why(e), 8000); }
     setBusy(false);
   }
 
@@ -886,9 +906,10 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
       const { blob } = await captureImage();
       readCtx.b64 = await aiImage(blob);
       const d = await gemini([{ text: READ_PROMPT }, imgPart(readCtx.b64)]);
-      readCtx.last = d.speech || ''; $('#askBtn').hidden = false;
-      speak(readCtx.last, d.lang);
-    } catch (e) { console.warn(e); if (e.message !== 'nokey') say('Sorry, I could not read that. Please try again.'); }
+      const sp = d.speech || d.text || d.description || ''; if (!sp) throw new Error('The AI sent back nothing to say');
+      readCtx.last = sp; $('#askBtn').hidden = false;
+      speak(sp, d.lang);
+    } catch (e) { console.warn(e); if (e.message !== 'nokey') { say('Sorry, I could not read that. Please try again.'); setTimeout(() => toast('Reason: ' + why(e), 9000), 400); } }
     setBusy(false);
   }
   function listen() {
@@ -910,8 +931,9 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     setBusy(true);
     try {
       const d = await gemini([{ text: ASK_PROMPT + `\nWhat you told them before: ${readCtx.last}\nTheir question: ${q}` }, imgPart(readCtx.b64)]);
-      readCtx.last = d.speech || readCtx.last; speak(d.speech, d.lang);
-    } catch (e) { say('Sorry, I could not answer that.'); }
+      const sp = d.speech || d.text || ''; if (!sp) throw new Error('Nothing to say');
+      readCtx.last = sp; speak(sp, d.lang);
+    } catch (e) { say('Sorry, I could not answer that.'); setTimeout(() => toast('Reason: ' + why(e), 9000), 400); }
     setBusy(false);
   }
 
