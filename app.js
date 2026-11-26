@@ -765,9 +765,9 @@
   function explain(e) {
     const d = why(e);
     if (/No internet/i.test(d)) return 'There is no internet connection.';
-    if (/^400/.test(d) && /key/i.test(d)) return 'Your AI key is not valid. Please check it on the key screen.';
+    if (/key (is )?not valid|API_KEY_INVALID|invalid api key/i.test(d) || (/^400/.test(d) && /key/i.test(d))) return 'Your AI key is not valid. Please check it on the key screen.';
     if (/^403/.test(d)) return 'Google refused this key. It may be restricted, or the Gemini service is not allowed for it.';
-    if (/^429/.test(d)) return 'The AI is busy, or the free limit is used up. Please wait a minute and try again.';
+    if (/^429|quota|RESOURCE_EXHAUSTED/i.test(d)) return 'The AI is busy, or the free limit is used up. Please wait a minute and try again.';
     if (/^5\d\d/.test(d)) return 'Google AI is having trouble right now. Please try again shortly.';
     if (/Unreadable|nothing to say/i.test(d)) return 'The AI answered in a form I could not understand. Please try again.';
     return 'Something went wrong: ' + d;
@@ -888,68 +888,118 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     setBusy(false);
   }
 
-  /* ---------- Read mode (speaks) ---------- */
-  const READ_PROMPT = `You are the eyes of a person with low vision. Look at the photo. If it has text (a banner, sign, label, page, board), read it out exactly in its own language and natural order, starting with headings. If it is mostly a scene, place, object or person's surroundings, describe what is in front of them in 2 to 4 short sentences, and if you can recognise the place say where it probably is, using words like probably when unsure. Return JSON only: {"lang":"BCP-47 code of the language you will speak","speech":"what to say aloud"}`;
-  const ASK_PROMPT = `You are the eyes of a person with low vision. Answer their question about this photo briefly and clearly, in the language of the question. If you are not sure, say so. Return JSON only: {"lang":"BCP-47 code of the language you will speak","speech":"the spoken answer"}`;
-  const readCtx = { b64: null, last: '' };
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  function stopSpeech() { try { speechSynthesis.cancel(); } catch { } setSpeaking(false); }
-  function setSpeaking(on) {
+  /* ---------- Read mode: live camera + voice with Gemini Live ---------- */
+  const LIVE_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=';
+  const LIVE_MODELS = ['models/gemini-3.8-live', 'models/gemini-live-2.5-flash-preview', 'models/gemini-2.0-flash-live-001'];
+  const LIVE_PROMPT = `You are the eyes and voice of a person with low vision, who is pointing their phone camera at the world. Start speaking at once, without waiting to be asked. First read out, in the same language it is written in, every piece of text you can see (banners, signs, labels, pages, boards), in natural reading order with headings first. If there is little or no text, describe what is in front of them in two or three short sentences, and if you recognise the place say where it probably is, using the word probably when unsure. As the camera moves, mention only what is new. The person may interrupt with a question at any time; answer briefly in the language they speak. Never say you cannot see: if the picture is unclear, say what would help, such as holding the phone steadier or moving closer. Speak plainly and calmly.`;
+  let live = null, liveModel = store.get('cc_live', '');
+  function stopSpeech() { try { speechSynthesis.cancel(); } catch { } }
+  function say(msg) { try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(msg); u.lang = navigator.language || 'en-IN'; speechSynthesis.speak(u); } catch { } toast(msg); }
+  function setLive(on, label) {
     document.body.classList.toggle('speaking', on);
-    $('#readLabel').textContent = on ? 'Stop' : 'Read to me';
+    $('#readLabel').textContent = label || (on ? 'Live · tap to stop' : 'Start live reading');
     $('#readIc').firstElementChild.setAttribute('href', on ? '#i-stop' : '#i-speaker');
   }
-  function speak(text, lang) {
-    stopSpeech();
-    const chunks = String(text).match(/[^.!?।\n]+[.!?।]*\s*/g) || [String(text)];
-    let n = 0; setSpeaking(true);
-    chunks.forEach((c, i) => {
-      const u = new SpeechSynthesisUtterance(c.trim()); if (!c.trim()) { return; }
-      if (lang) u.lang = lang; n++;
-      u.onend = u.onerror = () => { n--; if (n <= 0) setSpeaking(false); };
-      speechSynthesis.speak(u);
+  const u8ToB64 = u8 => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+  function openLive(key, model, variant) {
+    return new Promise((resolve, reject) => {
+      const fail = d => { const e = new Error('live'); e.detail = d; return e; };
+      let ws, ready = false;
+      try { ws = new WebSocket(LIVE_URL + encodeURIComponent(key)); } catch { return reject(fail('No internet connection')); }
+      const timer = setTimeout(() => { try { ws.close(); } catch { } reject(fail('Live connection timed out')); }, 12000);
+      ws.onopen = () => {
+        const setup = { model, systemInstruction: { parts: [{ text: LIVE_PROMPT }] } };
+        if (variant === 0) setup.responseModalities = ['AUDIO']; else setup.generationConfig = { responseModalities: ['AUDIO'] };
+        ws.send(JSON.stringify({ setup }));
+      };
+      ws.onmessage = async ev => {
+        let m; try { m = JSON.parse(typeof ev.data === 'string' ? ev.data : await ev.data.text()); } catch { return; }
+        if (m.setupComplete && !ready) { ready = true; clearTimeout(timer); resolve({ ws }); }
+        else if (ready && live && live.ws === ws) onLiveMessage(m);
+      };
+      ws.onerror = () => { };
+      ws.onclose = ev => {
+        clearTimeout(timer);
+        if (!ready) reject(fail(('Live ' + ev.code + ' ' + (ev.reason || '')).slice(0, 140)));
+        else if (live && live.ws === ws) { stopLive(); showError(fail('Live ' + ev.code + ' ' + (ev.reason || 'connection ended'))); }
+      };
     });
-    if (!n) setSpeaking(false);
   }
-  function say(msg) { speak(msg, navigator.language); toast(msg); }
-  async function readCapture() {
-    if (document.body.classList.contains('speaking')) { stopSpeech(); return; }
-    if (busy || !track) return;
+  let playCtx = null, playAt = 0, playing = [];
+  function playChunk(b64) {
+    try {
+      const bin = atob(b64), n = bin.length >> 1, f = new Float32Array(n);
+      for (let i = 0; i < n; i++) { let v = bin.charCodeAt(i * 2) | (bin.charCodeAt(i * 2 + 1) << 8); if (v >= 32768) v -= 65536; f[i] = v / 32768; }
+      playCtx ||= new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      playCtx.resume();
+      const buf = playCtx.createBuffer(1, n, 24000); buf.copyToChannel(f, 0);
+      const src = playCtx.createBufferSource(); src.buffer = buf; src.connect(playCtx.destination);
+      playAt = Math.max(playAt, playCtx.currentTime + 0.05); src.start(playAt); playAt += buf.duration;
+      playing.push(src); src.onended = () => { playing = playing.filter(x => x !== src); };
+    } catch (e) { console.warn('play', e); }
+  }
+  function flushPlayback() { playing.forEach(s => { try { s.stop(); } catch { } }); playing = []; playAt = 0; }
+  function onLiveMessage(m) {
+    const sc = m.serverContent; if (!sc) return;
+    if (sc.interrupted) flushPlayback();
+    const parts = sc.modelTurn && sc.modelTurn.parts || [];
+    parts.forEach(p => { if (p.inlineData && p.inlineData.data) playChunk(p.inlineData.data); });
+  }
+  async function startMedia(sess) {
+    const ws = sess.ws, send = o => { if (ws.readyState === 1) ws.send(JSON.stringify(o)); };
+    // video frames, about one a second
+    const fc = document.createElement('canvas');
+    sess.frameTimer = setInterval(() => {
+      if (!vf.videoWidth) return;
+      try {
+        const sw = vf.videoWidth, sh = vf.videoHeight, side = rot === 90 || rot === -90, s = Math.min(1, 768 / Math.max(sw, sh));
+        const c = drawRot(vf, sw, sh, rot); const k = Math.min(1, 768 / Math.max(c.width, c.height));
+        fc.width = Math.round(c.width * k); fc.height = Math.round(c.height * k); fc.getContext('2d').drawImage(c, 0, 0, fc.width, fc.height);
+        send({ realtimeInput: { video: { data: fc.toDataURL('image/jpeg', 0.6).split(',')[1], mimeType: 'image/jpeg' } } });
+      } catch { }
+    }, 1000);
+    // microphone, 16 kHz PCM
+    try {
+      sess.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      sess.ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      const src = sess.ac.createMediaStreamSource(sess.mic), proc = sess.ac.createScriptProcessor(2048, 1, 1), mute = sess.ac.createGain(); mute.gain.value = 0;
+      proc.onaudioprocess = e => {
+        const f = e.inputBuffer.getChannelData(0), pcm = new Int16Array(f.length);
+        for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); pcm[i] = v < 0 ? v * 32768 : v * 32767; }
+        send({ realtimeInput: { audio: { data: u8ToB64(new Uint8Array(pcm.buffer)), mimeType: 'audio/pcm;rate=16000' } } });
+      };
+      src.connect(proc); proc.connect(mute); mute.connect(sess.ac.destination);
+    } catch { toast('Microphone is blocked, so you cannot ask questions'); }
+    send({ realtimeInput: { text: 'Begin now. Read out everything in front of the camera.' } });
+  }
+  async function startLive() {
+    if (live) return stopLive();
     if (!Keys.get().length) { say('Please add your Google AI key first'); openKeys(); return; }
-    setBusy(true); click();
-    try {
-      const { blob } = await captureImage();
-      readCtx.b64 = await aiImage(blob);
-      const d = await gemini([{ text: READ_PROMPT }, imgPart(readCtx.b64)]);
-      const sp = d.speech || d.text || d.description || ''; if (!sp) throw new Error('The AI sent back nothing to say');
-      readCtx.last = sp; $('#askBtn').hidden = false;
-      speak(sp, d.lang);
-    } catch (e) { console.warn(e); if (e.message !== 'nokey') showError(e); }
+    if (!track) return;
+    stopSpeech(); setLive(true, 'Connecting…'); setBusy(true);
+    const keys = Keys.get(), models = liveModel ? [liveModel, ...LIVE_MODELS.filter(m => m !== liveModel)] : LIVE_MODELS;
+    let last = null, sess = null;
+    outer: for (let ki = 0; ki < keys.length; ki++) {
+      const key = keys[(keyIdx + ki) % keys.length];
+      for (const model of models) for (const variant of [0, 1]) {
+        try { sess = await openLive(key, model, variant); liveModel = model; store.set('cc_live', model); keyIdx = (keyIdx + ki + 1) % keys.length; break outer; }
+        catch (e) { last = e; if (/No internet/.test(e.detail || '')) break outer; }
+      }
+    }
     setBusy(false);
+    if (!sess) { setLive(false); showError(last || new Error('Could not start live reading')); return; }
+    live = sess; setLive(true); flushPlayback();
+    await startMedia(live);
   }
-  function listen() {
-    return new Promise(res => {
-      const r = new SR(); let done = false;
-      r.lang = navigator.language || 'en-IN'; r.interimResults = false; r.maxAlternatives = 1;
-      r.onresult = e => { done = true; res(e.results[0][0].transcript); };
-      r.onerror = () => { if (!done) { done = true; res(null); } };
-      r.onend = () => { if (!done) { done = true; res(null); } };
-      try { r.start(); showHint('Listening…'); } catch { res(null); }
-    });
-  }
-  async function askQuestion() {
-    if (busy || !readCtx.b64) return;
-    if (!SR) return say('Voice questions are not supported on this phone');
-    stopSpeech(); click();
-    const q = await listen();
-    if (!q) return say('I did not hear a question');
-    setBusy(true);
-    try {
-      const d = await gemini([{ text: ASK_PROMPT + `\nWhat you told them before: ${readCtx.last}\nTheir question: ${q}` }, imgPart(readCtx.b64)]);
-      const sp = d.speech || d.text || ''; if (!sp) throw new Error('Nothing to say');
-      readCtx.last = sp; speak(sp, d.lang);
-    } catch (e) { showError(e); }
-    setBusy(false);
+  function stopLive() {
+    const s = live; live = null;
+    if (s) {
+      clearInterval(s.frameTimer);
+      try { s.ws.close(); } catch { }
+      try { s.mic && s.mic.getTracks().forEach(t => t.stop()); } catch { }
+      try { s.ac && s.ac.close(); } catch { }
+    }
+    flushPlayback(); setLive(false);
   }
 
   /* ---------- QR ---------- */
@@ -988,7 +1038,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
 
   /* ---------- modes, strip, gestures ---------- */
   let mode = 'photo';
-  const HINTS = { photo: 'Tap to focus · pinch to zoom', video: 'Tap the bar to start recording', scan: 'Hold steady over the document', text: 'Point at text and tap Capture', read: 'Tap Read to hear what is ahead', qr: 'Point at a QR code' };
+  const HINTS = { photo: 'Tap to focus · pinch to zoom', video: 'Tap the bar to start recording', scan: 'Hold steady over the document', text: 'Point at text and tap Capture', read: 'Tap to start live reading', qr: 'Point at a QR code' };
   let hintT;
   function showHint(t) { const el = $('#hint'); el.textContent = t; el.classList.add('show'); clearTimeout(hintT); hintT = setTimeout(() => el.classList.remove('show'), 2400); }
   function buildStrip() {
@@ -1009,7 +1059,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     if (m === mode) return;
     if (rec) finishRec();
     if (mode === 'scan' && pages.length) finishPdf();
-    if (mode === 'read') stopSpeech();
+    if (mode === 'read') stopLive();
     mode = m; document.body.dataset.mode = m;
     paintStrip(); stopLoops(); startLoops(); showHint(HINTS[m]);
   }
@@ -1316,8 +1366,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
   $('#undoChip').addEventListener('click', () => { pages.pop(); paintPages(); toast('Last page removed'); });
   $('#errClose').addEventListener('click', () => { $('#errBox').hidden = true; try { speechSynthesis.cancel(); } catch { } });
   $('#textBtn').addEventListener('click', textCapture);
-  $('#readBtn').addEventListener('click', readCapture);
-  $('#askBtn').addEventListener('click', askQuestion);
+  $('#readBtn').addEventListener('click', startLive);
   $('#stampChip').addEventListener('click', () => { store.set('cc_stamp', stampOn() ? '0' : '1'); paintStamp(); });
   $$('#fmtSeg button').forEach(b => b.addEventListener('click', () => { store.set('cc_fmt', b.dataset.fmt); paintFmt(); }));
   $('#flashBtn').addEventListener('click', () => setTorch(!torchOn));
@@ -1395,13 +1444,17 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
   addEventListener('online', flushQueue);
   addEventListener('pagehide', () => { finishRec(true); if (pages.length) finishPdf(); });
   document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'hidden') { finishRec(true); if (pages.length) finishPdf(); stopSpeech(); stopLoops(); setTimeout(() => { if (document.visibilityState === 'hidden') stopCamera(); }, 800); }
+    if (document.visibilityState === 'hidden') { finishRec(true); if (pages.length) finishPdf(); stopLive(); stopLoops(); setTimeout(() => { if (document.visibilityState === 'hidden') stopCamera(); }, 800); }
     else { if (!stream) { if (await startCamera()) startLoops(); } flushQueue(); }
   });
 
   /* ---------- start ---------- */
   (async function init() {
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });
+    if ('serviceWorker' in navigator) {
+      const had = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !rec && !live) location.reload(); });
+      navigator.serviceWorker.register('sw.js').catch(() => { });
+    }
     buildStrip(); paintStamp(); paintFmt(); paintRec(); renderOnboard(); updateCloudChip(); startSensor();
     const lt = await idb.get('thumbs', '__latest').catch(() => null);
     if (lt) setLatest(lt);

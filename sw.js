@@ -1,4 +1,4 @@
-const V = 'cc-v7';
+const V = 'cc-v9';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -27,6 +27,7 @@ self.addEventListener('fetch', e => {
       if (res && (res.ok || res.type === 'opaque')) c.put(r, res.clone());
       return res;
     }).catch(() => hit);
-    return hit || net;
+    // our own files: newest first, cache only when offline. libraries: cache first.
+    return same ? net.then(res => res || hit) : (hit || net);
   }));
 });
