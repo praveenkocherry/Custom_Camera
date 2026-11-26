@@ -1,4 +1,4 @@
-const V = 'cc-v3';
+const V = 'cc-v4';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 
