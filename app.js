@@ -252,7 +252,7 @@
     if (!Drive.configured()) { toast('Google sign-in is not set up yet'); return false; }
     try {
       Drive.token = null; await Drive.getToken(true); await Drive.list('photo');
-      toast('Google Drive connected · v16'); updateCloudChip(); renderOnboard(); flushQueue();
+      toast('Google Drive connected · v17'); updateCloudChip(); renderOnboard(); flushQueue();
       return true;
     } catch (e) { console.warn(e); alertMsg('Could not connect to Google. ' + (e && e.message || '')); return false; }
   }
@@ -1051,7 +1051,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
   }
 
   /* ---------- modes, strip, gestures ---------- */
-  let mode = 'photo';
+  let mode = (() => { const m = store.get('cc_mode', 'photo'); return ['photo', 'video', 'scan', 'text', 'qr', 'read'].includes(m) ? m : 'photo'; })();
   const HINTS = { photo: 'Tap to focus · pinch to zoom', video: 'Tap the bar to start recording', scan: 'Hold steady over the document', text: 'Point at text and tap Capture', read: 'Tap to start live reading', qr: 'Point at a QR code' };
   let hintT;
   function showHint(t) { const el = $('#hint'); el.textContent = t; el.classList.add('show'); clearTimeout(hintT); hintT = setTimeout(() => el.classList.remove('show'), 2400); }
@@ -1075,7 +1075,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     if (mode === 'scan' && pages.length) finishPdf();
     if (mode === 'read') stopLive();
     if (mode === 'video' && !rec) cleanupMic();
-    mode = m; document.body.dataset.mode = m;
+    mode = m; document.body.dataset.mode = m; store.set('cc_mode', m);
     if (m === 'video') warmMic();
     paintStrip(); stopLoops(); startLoops(); showHint(HINTS[m]);
   }
@@ -1116,7 +1116,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
 
   async function openGallery() {
     if (rec) finishRec();
-    $('#gallery').hidden = false; pushLayer('gallery');
+    $('#gallery').hidden = false; pushLayer('gallery'); gal.section = 'all';
     if (!gal.items.length) { gal.items = await mergeItems(cachedList); renderGallery(); }
     loadGallery();
   }
@@ -1546,7 +1546,8 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     const lt = await idb.get('thumbs', '__latest').catch(() => null);
     if (lt) setLatest(lt);
     if (Drive.configured()) Drive.init().catch(() => { });
-    if (await startCamera()) { showHint(HINTS.photo); startLoops(); }
+    document.body.dataset.mode = mode; paintStrip(); if (mode === 'video') warmMic();
+    if (await startCamera()) { showHint(HINTS[mode]); startLoops(); }
     flushQueue();
     setTimeout(() => { if (!(navigator.connection && navigator.connection.saveData)) loadCV().catch(() => { }); }, 5000);
   })();
