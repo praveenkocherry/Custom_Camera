@@ -42,7 +42,8 @@
     });
   }
   let toastT;
-  function toast(msg, ms = 2800) {
+  function alertMsg(msg) { toast(msg, 8000); try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(msg); u.lang = navigator.language || 'en-IN'; speechSynthesis.speak(u); } catch { } }
+  function toast(msg, ms = 4500) {
     const t = $('#toast'); t.textContent = msg; t.classList.add('show');
     clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms);
   }
@@ -104,6 +105,8 @@
     else if (l === 'text') $('#textSheet').hidden = true;
     else if (l === 'keys') $('#keys').hidden = true;
     else if (l === 'rec') finishRec(true);
+    else if (l === 'sel') exitSel(true);
+    else if (l === 'confirm') $('#confirmSheet').hidden = true;
   });
   function pushLayer(name) { layers.push(name); history.pushState({ l: name }, ''); }
   function popLayer(name) { const i = layers.lastIndexOf(name); if (i >= 0) { layers.splice(i, 1); ignorePop++; history.back(); } }
@@ -192,13 +195,13 @@
         return put.json();
       });
     },
-    async list(kind) {
+    async list(kind, trashed = false) {
       return this.withFolder(kind, async fid => {
         let out = [], pt = '';
         do {
-          const q = `'${fid}' in parents and trashed=false`;
+          const q = `'${fid}' in parents and trashed=${trashed}`;
           const r = await this.api(`/drive/v3/files?q=${encodeURIComponent(q)}&fields=nextPageToken,files(id,name,mimeType,createdTime,thumbnailLink,description,appProperties)&orderBy=createdTime desc&pageSize=200${pt ? '&pageToken=' + pt : ''}`);
-          out.push(...r.files.map(f => ({ id: f.id, name: f.name, kind, mime: f.mimeType, created: Date.parse(f.createdTime), thumb: f.thumbnailLink, desc: f.description || '', fav: !!(f.appProperties && f.appProperties.fav === '1') })));
+          out.push(...r.files.map(f => ({ id: f.id, name: f.name, kind, mime: f.mimeType, created: Date.parse(f.createdTime), thumb: f.thumbnailLink, trashed, desc: f.description || '', fav: !!(f.appProperties && f.appProperties.fav === '1') })));
           pt = r.nextPageToken;
         } while (pt && out.length < 2000);
         return out;
@@ -206,6 +209,8 @@
     },
     async media(id) { const r = await this.api('/drive/v3/files/' + id + '?alt=media', { raw: true }); return r.blob(); },
     trash(id) { return this.api('/drive/v3/files/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) }); },
+    restore(id) { return this.api('/drive/v3/files/' + id + '?fields=id', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: false }) }); },
+    destroy(id) { return this.api('/drive/v3/files/' + id, { method: 'DELETE', raw: true }); },
     setFav(id, on) { return this.api('/drive/v3/files/' + id + '?fields=id', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appProperties: { fav: on ? '1' : null } }) }); },
     overwrite(id, blob) { return this.api('/upload/drive/v3/files/' + id + '?uploadType=media&fields=id', { method: 'PATCH', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob }); },
   };
@@ -251,7 +256,7 @@
       await Drive.getToken(true); await Drive.folders();
       toast('Google Drive connected'); updateCloudChip(); renderOnboard(); flushQueue();
       return true;
-    } catch (e) { console.warn(e); toast('Could not connect to Google'); return false; }
+    } catch (e) { console.warn(e); alertMsg('Could not connect to Google'); return false; }
   }
   async function saveItem(kind, blob, thumb, extra = {}) {
     const name = `${PREFIX[kind]}_${stamp()}.${extFor(blob.type)}`;
@@ -443,13 +448,13 @@
     setBusy(true); flashScreen(); click();
     try { setLatest(await makeThumb(drawRot(vf, vf.videoWidth, vf.videoHeight, rot))); pulseThumb(); } catch { }
     let raw;
-    try { raw = await grab(); } catch (e) { console.error(e); toast('Could not take the photo'); setBusy(false); return; }
+    try { raw = await grab(); } catch (e) { console.error(e); alertMsg('Could not take the photo'); setBusy(false); return; }
     setBusy(false);
     try {
       const blob = await develop(raw, { withStamp: stampOn() });
       await saveItem('photo', blob, await thumbOf(blob));
       toast('Saved', 1600);
-    } catch (e) { console.error(e); toast('Could not save the photo'); }
+    } catch (e) { console.error(e); alertMsg('Could not save the photo'); }
   }
 
   /* ---------- video ---------- */
@@ -464,20 +469,21 @@
     else if (rec.state === 'paused') { rec.resume(); recStart = Date.now(); paintRec(); }
   }
   function rotatedVideoTracks(a) {
-    const iw = vf.videoWidth, ih = vf.videoHeight, sc = Math.min(1, 1920 / Math.max(iw, ih));
+    const iw = vf.videoWidth, ih = vf.videoHeight, sc = Math.min(1, 2560 / Math.max(iw, ih));
     const sw = Math.round(iw * sc), sh = Math.round(ih * sc), side = a === 90 || a === -90;
     const c = document.createElement('canvas'); c.width = side ? sh : sw; c.height = side ? sw : sh;
     const x = c.getContext('2d');
     canvasTimer = setInterval(() => {
+      const z = zoomMode === 'digital' && zoom > 1 ? zoom : 1;
       x.save(); x.translate(c.width / 2, c.height / 2); x.rotate(a * Math.PI / 180);
-      x.drawImage(vf, -sw / 2, -sh / 2, sw, sh); x.restore();
+      x.drawImage(vf, iw * (1 - 1 / z) / 2, ih * (1 - 1 / z) / 2, iw / z, ih / z, -sw / 2, -sh / 2, sw, sh); x.restore();
     }, 33);
     return c.captureStream(30).getVideoTracks();
   }
   async function startRec() {
     if (!track || !stream) return;
     if (!micStream) { try { micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); } catch { micStream = null; toast('Microphone is blocked, recording without sound'); } }
-    const vt = rot !== 0 ? rotatedVideoTracks(rot) : stream.getVideoTracks();
+    const vt = (rot !== 0 || (zoomMode === 'digital' && zoom > 1.01)) ? rotatedVideoTracks(rot) : stream.getVideoTracks();
     const ms = new MediaStream([...vt, ...(micStream ? micStream.getAudioTracks() : [])]);
     recMime = pickMime();
     try {
@@ -688,7 +694,7 @@
         await saveItem('scan', r.blob, await thumbOf(r.blob));
         toast((r.found ? 'Scan saved' : 'Saved, page edges not found') + ' · ' + kb + ' KB');
       }
-    } catch (e) { console.error(e); toast('Scan failed'); }
+    } catch (e) { console.error(e); alertMsg('Scan failed'); }
     setBusy(false);
   }
   async function finishPdf() {
@@ -698,7 +704,7 @@
       const pdf = await pdfFromPages(ps);
       await saveItem('scan', pdf, await thumbOf(ps[0].blob));
       toast(`PDF saved · ${ps.length} page${ps.length > 1 ? 's' : ''} · ${Math.round(pdf.size / 1024)} KB`);
-    } catch (e) { console.error(e); toast('Could not make the PDF'); }
+    } catch (e) { console.error(e); alertMsg('Could not make the PDF'); }
   }
   function sizeOverlay() { const d = devicePixelRatio || 1; ov.width = innerWidth * d; ov.height = innerHeight * d; }
   function drawQuad(q) {
@@ -803,7 +809,7 @@
     const list = $('#keyList'); list.replaceChildren();
     Keys.get().forEach((k, i) => list.append(h('div', { class: 'krow' },
       h('code', { text: '•••• ' + k.slice(-4) }),
-      h('button', { class: 'ib', 'aria-label': 'Copy key', onclick: async () => { try { await navigator.clipboard.writeText(k); toast('Copied'); } catch { toast('Could not copy'); } } }, icon('i-copy')),
+      h('button', { class: 'ib', 'aria-label': 'Copy key', onclick: async () => { try { await navigator.clipboard.writeText(k); toast('Copied'); } catch { alertMsg('Could not copy'); } } }, icon('i-copy')),
       h('button', { class: 'ib', 'aria-label': 'Delete key', onclick: () => { const a = Keys.get(); a.splice(i, 1); Keys.set(a); renderKeys(); toast('Key removed'); } }, icon('i-trash')))));
   }
   async function saveKey() {
@@ -1098,8 +1104,8 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
   });
 
   /* ---------- items, gallery ---------- */
-  const gal = { section: 'all', items: [], view: [], qr: [], loading: false, sel: null };
-  const emptyText = () => gal.section === 'qr' ? 'No QR codes scanned yet.' : gal.section === 'fav' ? 'Tap the heart on anything to find it here.' : Drive.connected() ? 'Nothing here yet. Capture something!' : 'Connect Google Drive to see everything you have saved.';
+  const gal = { section: 'all', items: [], view: [], qr: [], trash: [], loading: false, sel: null };
+  const emptyText = () => gal.section === 'trash' ? 'Nothing deleted recently. Deleted items stay here for 30 days.' : gal.section === 'qr' ? 'No QR codes scanned yet.' : gal.section === 'fav' ? 'Tap the heart on anything to find it here.' : Drive.connected() ? 'Nothing here yet. Capture something!' : 'Connect Google Drive to see everything you have saved.';
   let cachedList = [];
   try { cachedList = JSON.parse(store.get('cc_list', '[]')); } catch { }
   async function mergeItems(remote) {
@@ -1116,7 +1122,13 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     if (!gal.items.length) { gal.items = await mergeItems(cachedList); renderGallery(); }
     loadGallery();
   }
-  function hideGallery() { $('#gallery').hidden = true; gal.sel = null; paintSel(); }
+  function hideGallery() { $('#gallery').hidden = true; if (gal.sel) { gal.sel = null; const i = layers.lastIndexOf('sel'); if (i >= 0) layers.splice(i, 1); paintSel(); } }
+  async function loadTrash() {
+    if (!Drive.connected() || !navigator.onLine) { gal.trash = []; renderGallery(); return; }
+    try { const r = []; (await Promise.all(KINDS.map(k => Drive.list(k, true)))).forEach(l => r.push(...l)); gal.trash = r.sort((a, b) => b.created - a.created); }
+    catch (e) { console.warn(e); alertMsg('Could not load recently deleted'); }
+    renderGallery();
+  }
   async function loadGallery() {
     gal.loading = true; renderGallery();
     let remote = [], ok = false;
@@ -1129,6 +1141,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     if (ok) saveCache();
     gal.qr = (await idb.all('qrlog').catch(() => [])).sort((a, b) => b.time - a.time);
     gal.loading = false; renderGallery(); updateCloudChip();
+    if (gal.section === 'trash') loadTrash();
     if (!$('#thumb').classList.contains('has') && gal.items[0]) { const img = new Image(); loadThumb(gal.items[0], $('#thumbImg'), 160).then(() => $('#thumb').classList.add('has')); }
   }
   async function loadThumb(it, img, size = 240) {
@@ -1142,18 +1155,31 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     };
     img.src = url;
   }
+  function startSel(it) { if (gal.sel) return; gal.sel = new Set([it.id]); pushLayer('sel'); renderGallery(); paintSel(); }
+  function exitSel(viaBack) {
+    if (!gal.sel) return;
+    gal.sel = null; paintSel(); renderGallery();
+    if (!viaBack) popLayer('sel');
+  }
   function cell(it, idx) {
-    const img = h('img', { alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' });
+    const img = h('img', { alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer', draggable: 'false' });
     loadThumb(it, img);
     const sel = gal.sel && gal.sel.has(it.id);
+    let lp = 0, long = false;
     const el = h('button', { class: 'cell ' + it.kind + (sel ? ' sel' : ''), 'aria-label': (it.kind === 'text' ? 'Text' : it.kind) + (it.fav ? ', favourite' : ''),
-      onclick: () => { if (gal.sel) { gal.sel.has(it.id) ? gal.sel.delete(it.id) : gal.sel.add(it.id); renderGallery(); paintSel(); } else openViewer(idx); } },
+      onclick: () => {
+        if (long) { long = false; return; }
+        if (gal.sel) { gal.sel.has(it.id) ? gal.sel.delete(it.id) : gal.sel.add(it.id); renderGallery(); paintSel(); } else openViewer(idx);
+      },
+      oncontextmenu: e => e.preventDefault() },
       img,
       it.kind === 'video' ? h('span', { class: 'badge play', text: '▶' }) : null,
       it.mime === 'application/pdf' ? h('span', { class: 'badge play', text: 'PDF' }) : null,
       it.pending ? h('span', { class: 'badge wait', text: '↑' }) : null,
       it.fav ? h('span', { class: 'badge fav' }, icon('i-heart')) : null,
       gal.sel ? h('span', { class: 'badge chk' }, sel ? icon('i-check', 'ic sm') : null) : null);
+    el.addEventListener('touchstart', () => { long = false; clearTimeout(lp); lp = setTimeout(() => { long = true; if (!gal.sel) startSel(it); }, 480); }, { passive: true });
+    ['touchend', 'touchmove', 'touchcancel'].forEach(ev => el.addEventListener(ev, () => clearTimeout(lp), { passive: true }));
     return el;
   }
   function renderQRList(body) {
@@ -1164,7 +1190,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     const body = $('#galBody'); body.replaceChildren();
     $$('#galTabs button').forEach(b => b.classList.toggle('on', b.dataset.sec === gal.section));
     if (gal.section === 'qr') { renderQRList(body); return; }
-    const list = gal.items.filter(i => gal.section === 'all' || (gal.section === 'fav' ? i.fav : i.kind === gal.section));
+    const list = gal.section === 'trash' ? gal.trash : gal.items.filter(i => gal.section === 'all' || (gal.section === 'fav' ? i.fav : i.kind === gal.section));
     gal.view = list;
     if (!list.length) { body.append(h('div', { class: 'empty', text: gal.loading ? 'Loading…' : emptyText() })); return; }
     let y = null, m = null, d = null, grid = null;
@@ -1177,11 +1203,12 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     });
   }
   function paintSel() {
-    const on = !!gal.sel;
-    $('#selBar').hidden = !on;
+    const on = !!gal.sel, tr = gal.section === 'trash';
+    $('#selHead').hidden = !on; $('#galHead').hidden = on;
     if (on) $('#selCount').textContent = gal.sel.size + ' selected';
-    $('#galSelect').classList.toggle('on', on);
+    $('#selFav').hidden = tr; $('#selShare').hidden = tr; $('#selRestore').hidden = !tr;
   }
+  const selItems = () => (gal.section === 'trash' ? gal.trash : gal.items).filter(i => gal.sel && gal.sel.has(i.id));
 
   /* peek: swipe down on camera to browse the latest items */
   async function peek() {
@@ -1213,6 +1240,9 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     $('#vPdf').hidden = !isPdf;
     $('#vBar').hidden = $('#vEnhance').hidden && $('#vCopy').hidden && $('#vPdf').hidden;
     $('#enhBar').hidden = true;
+    const tr = !!it.trashed;
+    $('#vFav').hidden = tr; $('#vShare').hidden = tr; $('#vRestore').hidden = !tr;
+    if (tr) { $('#vEnhance').hidden = true; $('#vBar').hidden = $('#vCopy').hidden && $('#vPdf').hidden; }
     $('#vFav').classList.toggle('on', !!it.fav);
   }
   async function showItem() {
@@ -1246,23 +1276,58 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     if (Math.abs(dy) > 70 && Math.abs(dy) > Math.abs(dx) * 1.4) stepViewer(dy > 0 ? 1 : -1);
     else if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.4) stepViewer(dx < 0 ? 1 : -1);
   });
-  let delArm = 0;
   async function trashItem(it) {
-    if (it.pending) await idb.del('queue', it.qid); else await Drive.trash(it.id);
-    await idb.del('thumbs', it.name).catch(() => { });
+    if (it.pending) { it.rec = await idb.get('queue', it.qid); await idb.del('queue', it.qid); } else await Drive.trash(it.id);
     gal.items = gal.items.filter(x => x !== it);
   }
-  async function onDelete() {
-    const btn = $('#vDel');
-    if (!delArm) { btn.classList.add('arm'); toast('Tap delete again to confirm'); delArm = setTimeout(() => { delArm = 0; btn.classList.remove('arm'); }, 3000); return; }
-    clearTimeout(delArm); delArm = 0; btn.classList.remove('arm');
-    const it = gal.view[view.i]; if (!it) return;
+  let undoT = 0, undoList = [];
+  function showUndo(its) {
+    undoList = its; $('#undoTxt').textContent = its.length === 1 ? 'Deleted' : 'Deleted ' + its.length; $('#undoBar').hidden = false;
+    clearTimeout(undoT); undoT = setTimeout(() => { $('#undoBar').hidden = true; undoList = []; }, 8000);
+  }
+  async function undoDelete() {
+    clearTimeout(undoT); $('#undoBar').hidden = true; const its = undoList; undoList = [];
     try {
-      await trashItem(it); saveCache();
-      gal.view = gal.view.filter(x => x !== it); renderGallery(); updateCloudChip();
-      if (!gal.view.length) { history.back(); return; }
-      view.i = Math.min(view.i, gal.view.length - 1); showItem(); toast('Deleted');
-    } catch (e) { console.warn(e); toast('Could not delete'); }
+      for (const it of its) { if (it.pending) { if (it.rec) { const { id, ...rest } = it.rec; await idb.add('queue', rest); } } else await Drive.restore(it.id); }
+      toast('Restored'); await loadGallery(); flushQueue();
+    } catch (e) { console.warn(e); alertMsg('Could not undo'); }
+  }
+  async function deleteItems(its) {
+    let failed = 0;
+    for (const it of its) { try { await trashItem(it); } catch { failed++; } }
+    saveCache(); renderGallery(); updateCloudChip();
+    if (failed) alertMsg('Could not delete ' + failed + ' item' + (failed > 1 ? 's' : ''));
+    const done = its.filter(i => !gal.items.includes(i));
+    if (done.length) showUndo(done);
+  }
+  function confirmForever(n) {
+    return new Promise(res => {
+      $('#confirmTitle').textContent = n === 1 ? 'Delete this forever?' : `Delete ${n} items forever?`;
+      $('#confirmSheet').hidden = false; pushLayer('confirm');
+      const done = v => { $('#confirmYes').onclick = $('#confirmNo').onclick = null; if (layers.includes('confirm')) popLayer('confirm'); $('#confirmSheet').hidden = true; res(v); };
+      $('#confirmYes').onclick = () => done(true); $('#confirmNo').onclick = () => done(false);
+    });
+  }
+  async function destroyItems(its) {
+    if (!its.length || !(await confirmForever(its.length))) return;
+    let failed = 0;
+    for (const it of its) { try { await Drive.destroy(it.id); gal.trash = gal.trash.filter(x => x !== it); } catch { failed++; } }
+    renderGallery(); toast(failed ? 'Some could not be deleted' : 'Deleted forever');
+  }
+  async function restoreItems(its) {
+    let failed = 0;
+    for (const it of its) { try { await Drive.restore(it.id); gal.trash = gal.trash.filter(x => x !== it); } catch { failed++; } }
+    renderGallery(); toast(failed ? 'Some could not be restored' : 'Restored'); loadGallery();
+  }
+  async function afterViewerAction(it) {
+    gal.view = gal.view.filter(x => x !== it);
+    if (!gal.view.length) { history.back(); return; }
+    view.i = Math.min(view.i, gal.view.length - 1); showItem();
+  }
+  async function onDelete() {
+    const it = gal.view[view.i]; if (!it) return;
+    if (it.trashed) { await destroyItems([it]); if (!gal.trash.includes(it)) afterViewerAction(it); return; }
+    await deleteItems([it]); afterViewerAction(it);
   }
   async function itemBlob(it) { return it.pending ? it.blob : mediaBlob(it); }
   async function shareBlobs(list) {
@@ -1270,15 +1335,18 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
       const files = list.map(({ it, blob }) => new File([blob], it.name, { type: blob.type }));
       if (navigator.canShare && navigator.canShare({ files })) await navigator.share({ files });
       else { files.forEach(f => { const a = h('a', { href: URL.createObjectURL(f), download: f.name }); document.body.append(a); a.click(); a.remove(); }); }
-    } catch (e) { if (e.name !== 'AbortError') toast('Could not share'); }
+    } catch (e) { if (e.name !== 'AbortError') alertMsg('Could not share'); }
   }
   async function onShare() { const it = gal.view[view.i]; if (!it || !view.blob) return; await shareBlobs([{ it, blob: view.blob }]); }
-  async function toggleFav(it) {
-    it.fav = !it.fav;
+  async function setFavFor(it, val) {
+    const old = it.fav; it.fav = val;
     try {
-      if (it.pending) { const rec2 = await idb.get('queue', it.qid); if (rec2) { rec2.fav = it.fav; await idb.put('queue', rec2); } }
-      else { await Drive.setFav(it.id, it.fav); saveCache(); }
-    } catch (e) { it.fav = !it.fav; toast('Could not update favourite'); }
+      if (it.pending) { const r2 = await idb.get('queue', it.qid); if (r2) { r2.fav = val; await idb.put('queue', r2); } }
+      else await Drive.setFav(it.id, val);
+    } catch (e) { it.fav = old; throw e; }
+  }
+  async function toggleFav(it) {
+    try { await setFavFor(it, !it.fav); saveCache(); } catch { alertMsg('Could not update favourite'); }
     $('#vFav').classList.toggle('on', !!it.fav); renderGallery();
   }
 
@@ -1323,7 +1391,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
       const url = URL.createObjectURL(out);
       $('#vStage').replaceChildren(h('img', { src: url, alt: '' }));
       $('#vBar').hidden = true; $('#enhBar').hidden = false; toast('Enhanced. Save it as new or overwrite.');
-    } catch (e) { console.warn(e); toast('Could not enhance this photo'); }
+    } catch (e) { console.warn(e); alertMsg('Could not enhance this photo'); }
   }
   function cancelEnhance() { view.enh = null; showItem(); }
   async function saveEnhanced(overwrite) {
@@ -1336,7 +1404,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
         toast('Overwritten');
       } else { await saveItem('photo', out, await thumbOf(out)); toast('Saved as new'); }
       view.enh = null; await loadGallery(); if (overwrite) showItem(); else { history.back(); }
-    } catch (e) { console.warn(e); toast('Could not save'); }
+    } catch (e) { console.warn(e); alertMsg('Could not save'); }
   }
 
   /* ---------- onboarding: install first, then connect Drive ---------- */
@@ -1398,24 +1466,30 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
   $('#galBack').addEventListener('click', () => history.back());
   $('#vClose').addEventListener('click', () => history.back());
   $('#galRefresh').addEventListener('click', loadGallery);
-  $('#galSelect').addEventListener('click', () => { gal.sel = gal.sel ? null : new Set(); renderGallery(); paintSel(); });
-  $('#selCancel').addEventListener('click', () => { gal.sel = null; renderGallery(); paintSel(); });
+  $('#selCancel').addEventListener('click', () => exitSel(false));
+  $('#selAll').addEventListener('click', () => { if (!gal.sel) return; gal.view.forEach(i => gal.sel.add(i.id)); renderGallery(); paintSel(); });
+  $('#selFav').addEventListener('click', async () => {
+    const its = selItems(); if (!its.length) return toast('Select something first');
+    const val = !its.every(i => i.fav);
+    try { for (const it of its) await setFavFor(it, val); saveCache(); toast(val ? 'Added to favourites' : 'Removed from favourites'); } catch { alertMsg('Could not update favourites'); }
+    renderGallery(); paintSel();
+  });
   $('#selShare').addEventListener('click', async () => {
-    const its = gal.items.filter(i => gal.sel && gal.sel.has(i.id)); if (!its.length) return toast('Select something first');
+    const its = selItems(); if (!its.length) return toast('Select something first');
     toast('Preparing…', 8000);
-    try { await shareBlobs(await Promise.all(its.map(async it => ({ it, blob: await itemBlob(it) })))); } catch { toast('Could not prepare the files'); }
+    try { await shareBlobs(await Promise.all(its.map(async it => ({ it, blob: await itemBlob(it) })))); } catch { alertMsg('Could not prepare the files'); }
   });
-  let selArm = 0;
   $('#selDel').addEventListener('click', async () => {
-    const its = gal.items.filter(i => gal.sel && gal.sel.has(i.id)); if (!its.length) return toast('Select something first');
-    const b = $('#selDel');
-    if (!selArm) { b.classList.add('arm'); toast(`Tap again to delete ${its.length}`); selArm = setTimeout(() => { selArm = 0; b.classList.remove('arm'); }, 3000); return; }
-    clearTimeout(selArm); selArm = 0; b.classList.remove('arm');
-    try { for (const it of its) await trashItem(it); saveCache(); gal.sel = null; renderGallery(); paintSel(); updateCloudChip(); toast('Deleted'); } catch (e) { toast('Could not delete some items'); }
+    const its = selItems(); if (!its.length) return toast('Select something first');
+    const tr = gal.section === 'trash'; exitSel(false);
+    if (tr) await destroyItems(its); else await deleteItems(its);
   });
-  const SECS = ['all', 'fav', 'photo', 'video', 'scan', 'text', 'qr'];
+  $('#selRestore').addEventListener('click', async () => { const its = selItems(); if (!its.length) return toast('Select something first'); exitSel(false); await restoreItems(its); });
+  $('#vRestore').addEventListener('click', async () => { const it = gal.view[view.i]; if (!it) return; await restoreItems([it]); afterViewerAction(it); });
+  $('#undoBtn').addEventListener('click', undoDelete);
+  const SECS = ['all', 'fav', 'photo', 'video', 'scan', 'text', 'qr', 'trash'];
   function setSection(sec) {
-    gal.section = sec; renderGallery(); $('#galBody').scrollTop = 0;
+    gal.section = sec; renderGallery(); $('#galBody').scrollTop = 0; if (sec === 'trash') loadTrash();
     const b = $(`#galTabs button[data-sec="${sec}"]`); if (b) b.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
   }
   $$('#galTabs button').forEach(b => b.addEventListener('click', () => setSection(b.dataset.sec)));
@@ -1436,7 +1510,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     const it = gal.view[view.i]; if (!it) return;
     const t = (await idb.get('texts', it.name).catch(() => null)) || it.desc;
     if (!t) return toast('No text saved for this one');
-    try { await navigator.clipboard.writeText(t); toast('Text copied'); } catch { toast('Could not copy'); }
+    try { await navigator.clipboard.writeText(t); toast('Text copied'); } catch { alertMsg('Could not copy'); }
   });
   $('#vPdf').addEventListener('click', () => { if (view.url) window.open(view.url, '_blank'); });
   $('#qrPick').addEventListener('click', () => $('#qrFile').click());
@@ -1446,12 +1520,12 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
       const bmp = await createImageBitmap(f);
       const text = await decodeQR(bmp, bmp.width, bmp.height);
       if (text) handleQR(text); else toast('No QR code found in that photo');
-    } catch { toast('Could not read that image'); }
+    } catch { alertMsg('Could not read that image'); }
   });
-  $('#qrCopy').addEventListener('click', async () => { try { await navigator.clipboard.writeText($('#qrText').textContent); toast('Copied'); } catch { toast('Could not copy'); } });
+  $('#qrCopy').addEventListener('click', async () => { try { await navigator.clipboard.writeText($('#qrText').textContent); toast('Copied'); } catch { alertMsg('Could not copy'); } });
   $('#qrClose').addEventListener('click', () => history.back());
   $('#textClose').addEventListener('click', () => history.back());
-  $('#textCopy').addEventListener('click', async () => { if (!lastText) return; try { await navigator.clipboard.writeText(lastText.text); toast('Text copied'); } catch { toast('Could not copy'); } });
+  $('#textCopy').addEventListener('click', async () => { if (!lastText) return; try { await navigator.clipboard.writeText(lastText.text); toast('Text copied'); } catch { alertMsg('Could not copy'); } });
   $('#textShare').addEventListener('click', () => { if (lastText) shareBlobs([{ it: { name: lastText.name }, blob: lastText.blob }]); });
   $('#camRetry').addEventListener('click', async () => { if (await startCamera()) startLoops(); });
   addEventListener('resize', sizeOverlay);
@@ -1469,7 +1543,9 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
       navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !rec && !live) location.reload(); });
       navigator.serviceWorker.register('sw.js').catch(() => { });
     }
-    buildStrip(); paintStamp(); paintFmt(); paintRec(); renderOnboard(); updateCloudChip(); startSensor();
+    buildStrip(); paintStamp(); paintFmt(); paintRec(); updateCloudChip(); startSensor();
+    try { if (!isStandalone() && navigator.getInstalledRelatedApps) { const a = await navigator.getInstalledRelatedApps(); if (a && a.length) { sessionStorage.setItem('cc_skip_install', '1'); toast('Custom Camera is already installed. Open it from your home screen.', 7000); } } } catch { }
+    renderOnboard();
     const lt = await idb.get('thumbs', '__latest').catch(() => null);
     if (lt) setLatest(lt);
     if (Drive.configured()) Drive.init().catch(() => { });

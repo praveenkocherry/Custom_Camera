@@ -38,6 +38,7 @@
   <symbol id="i-speaker" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
   <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="i-restore" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 1 2.3 5.7M4 5v7h7"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
 </svg>
 
@@ -121,11 +122,19 @@
 </div>
 
 <section id="gallery" hidden>
-  <header class="gh">
+  <header class="gh" id="galHead">
     <button id="galBack" class="ib" aria-label="Back"><svg class="ic"><use href="#i-back"/></svg></button>
     <h1 id="galTitle">Gallery</h1>
-    <button id="galSelect" class="ib" aria-label="Select several"><svg class="ic"><use href="#i-select"/></svg></button>
     <button id="galRefresh" class="ib" aria-label="Refresh"><svg class="ic"><use href="#i-refresh"/></svg></button>
+  </header>
+  <header class="gh sel" id="selHead" hidden>
+    <button id="selCancel" class="ib" aria-label="Close selection"><svg class="ic"><use href="#i-close"/></svg></button>
+    <span id="selCount">0 selected</span>
+    <button id="selAll" class="ib" aria-label="Select all"><svg class="ic"><use href="#i-select"/></svg></button>
+    <button id="selFav" class="ib" aria-label="Favourite"><svg class="ic"><use href="#i-heart"/></svg></button>
+    <button id="selShare" class="ib" aria-label="Share"><svg class="ic"><use href="#i-share"/></svg></button>
+    <button id="selRestore" class="ib" aria-label="Restore" hidden><svg class="ic"><use href="#i-restore"/></svg></button>
+    <button id="selDel" class="ib" aria-label="Delete"><svg class="ic"><use href="#i-trash"/></svg></button>
   </header>
   <nav id="galTabs">
     <button data-sec="all" class="on">All</button>
@@ -135,20 +144,16 @@
     <button data-sec="scan">Scans</button>
     <button data-sec="text">Texts</button>
     <button data-sec="qr">QR</button>
+    <button data-sec="trash">Recently deleted</button>
   </nav>
   <div id="galBody"></div>
-  <div id="selBar" hidden>
-    <button id="selCancel" class="ib" aria-label="Cancel selection"><svg class="ic"><use href="#i-close"/></svg></button>
-    <span id="selCount">0 selected</span>
-    <button id="selShare" class="ib" aria-label="Share selected"><svg class="ic"><use href="#i-share"/></svg></button>
-    <button id="selDel" class="ib" aria-label="Delete selected"><svg class="ic"><use href="#i-trash"/></svg></button>
-  </div>
 </section>
 
 <section id="viewer" hidden>
   <header class="vh">
     <button id="vClose" class="ib" aria-label="Back"><svg class="ic"><use href="#i-back"/></svg></button>
     <div class="vt"><div id="vTitle"></div><div id="vSub"></div></div>
+    <button id="vRestore" class="ib" aria-label="Restore" hidden><svg class="ic"><use href="#i-restore"/></svg></button>
     <button id="vFav" class="ib" aria-label="Favourite"><svg class="ic"><use href="#i-heart"/></svg></button>
     <button id="vShare" class="ib" aria-label="Share"><svg class="ic"><use href="#i-share"/></svg></button>
     <button id="vDel" class="ib" aria-label="Delete"><svg class="ic"><use href="#i-trash"/></svg></button>
@@ -206,6 +211,17 @@
       <button id="textShare" class="primary alt"><svg class="ic sm"><use href="#i-share"/></svg>Share</button>
     </div>
     <button id="textClose" class="ghost">Done</button>
+  </div>
+</section>
+
+<div id="undoBar" hidden role="status"><span id="undoTxt"></span><button id="undoBtn" class="undo">Undo</button></div>
+
+<section id="confirmSheet" hidden>
+  <div class="sheet">
+    <h2 id="confirmTitle">Delete forever?</h2>
+    <p id="confirmText">This cannot be undone.</p>
+    <button id="confirmYes" class="primary">Delete forever</button>
+    <button id="confirmNo" class="ghost">Cancel</button>
   </div>
 </section>
 
