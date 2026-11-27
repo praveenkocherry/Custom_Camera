@@ -112,11 +112,7 @@
   function popLayer(name) { const i = layers.lastIndexOf(name); if (i >= 0) { layers.splice(i, 1); ignorePop++; history.back(); } }
 
   /* ---------- theme ---------- */
-  function applyTheme(t) {
-    document.documentElement.dataset.theme = t; store.set('cc_theme', t);
-    $('#themeUse').setAttribute('href', t === 'dark' ? '#i-sun' : '#i-moon');
-  }
-  applyTheme(store.get('cc_theme', matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+  document.documentElement.dataset.theme = 'dark';
 
   /* ---------- Google Drive ---------- */
   let needReconnect = false;
@@ -256,7 +252,7 @@
     if (!Drive.configured()) { toast('Google sign-in is not set up yet'); return false; }
     try {
       Drive.token = null; await Drive.getToken(true); await Drive.list('photo');
-      toast('Google Drive connected'); updateCloudChip(); renderOnboard(); flushQueue();
+      toast('Google Drive connected · v15'); updateCloudChip(); renderOnboard(); flushQueue();
       return true;
     } catch (e) { console.warn(e); alertMsg('Could not connect to Google. ' + (e && e.message || '')); return false; }
   }
@@ -1455,7 +1451,6 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
   $$('#fmtSeg button').forEach(b => b.addEventListener('click', () => { store.set('cc_fmt', b.dataset.fmt); paintFmt(); }));
   $('#flashBtn').addEventListener('click', () => setTorch(!torchOn));
   $('#flipBtn').addEventListener('click', flipCamera);
-  $('#themeBtn').addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
   $('#keyBtn').addEventListener('click', openKeys);
   $('#keysBack').addEventListener('click', () => history.back());
   $('#keySave').addEventListener('click', saveKey);
