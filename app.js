@@ -131,6 +131,8 @@
     getToken(interactive = false) {
       if (this.token && Date.now() < this.exp - 60000) return Promise.resolve(this.token);
       return new Promise(async (res, rej) => {
+        const tm = interactive ? 0 : setTimeout(() => rej(new Error('auth timeout')), 7000);
+        const res0 = res, rej0 = rej; res = v => { clearTimeout(tm); res0(v); }; rej = e => { clearTimeout(tm); rej0(e); };
         try {
           if (!this.configured()) throw new Error('not configured');
           if (!this.client) await this.init();
@@ -140,7 +142,7 @@
             store.set('cc_drive', '1'); needReconnect = false; res(this.token);
           };
           this.client.error_callback = e => rej(new Error('auth ' + (e && e.type || 'failed')));
-          this.client.requestAccessToken({ prompt: interactive && !this.connected() ? 'consent' : '' });
+          this.client.requestAccessToken({ prompt: interactive && (!this.connected() || needReconnect) ? 'consent' : '' });
         } catch (e) { rej(e); }
       });
     },
@@ -1134,7 +1136,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     let remote = [], ok = false;
     if (Drive.connected() && navigator.onLine) {
       try { (await Promise.all(KINDS.map(k => Drive.list(k)))).forEach(l => remote.push(...l)); ok = true; }
-      catch (e) { console.warn(e); if (isAuthErr(e)) { needReconnect = true; updateCloudChip(); toast('Tap the cloud icon to reconnect'); } }
+      catch (e) { console.warn(e); if (isAuthErr(e)) { needReconnect = true; updateCloudChip(); alertMsg('Google Drive needs reconnecting. Tap the cloud icon.'); } }
     }
     if (!ok) remote = cachedList;
     gal.items = await mergeItems(remote);
