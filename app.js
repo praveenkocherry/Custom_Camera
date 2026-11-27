@@ -252,7 +252,7 @@
     if (!Drive.configured()) { toast('Google sign-in is not set up yet'); return false; }
     try {
       Drive.token = null; await Drive.getToken(true); await Drive.list('photo');
-      toast('Google Drive connected · v17'); updateCloudChip(); renderOnboard(); flushQueue();
+      toast('Google Drive connected · v21'); updateCloudChip(); renderOnboard(); flushQueue();
       return true;
     } catch (e) { console.warn(e); alertMsg('Could not connect to Google. ' + (e && e.message || '')); return false; }
   }
@@ -523,7 +523,7 @@
     const ms = recAcc + (rec && rec.state === 'recording' ? Date.now() - recStart : 0);
     document.body.classList.toggle('recording', live);
     document.body.classList.toggle('paused', paused);
-    $('#recLabel').textContent = !live ? 'Start recording' : paused ? 'Paused · tap to resume' : 'Tap to pause';
+    $('#recLabel').textContent = !live ? 'Record' : paused ? 'Resume' : 'Pause';
     $('#recTime').textContent = live ? fmtTime(ms) : '';
     $('#recChip').hidden = !live;
     $('#chipTime').textContent = fmtTime(ms);
@@ -911,7 +911,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
   function say(msg) { try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(msg); u.lang = navigator.language || 'en-IN'; speechSynthesis.speak(u); } catch { } toast(msg); }
   function setLive(on, label) {
     document.body.classList.toggle('speaking', on);
-    $('#readLabel').textContent = label || (on ? 'Live · tap to stop' : 'Start live reading');
+    $('#readLabel').textContent = label || (on ? 'Tap to stop' : 'Start reading');
     $('#readIc').firstElementChild.setAttribute('href', on ? '#i-stop' : '#i-speaker');
   }
   const u8ToB64 = u8 => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
