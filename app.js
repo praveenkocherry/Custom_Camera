@@ -255,10 +255,10 @@
   async function connectDrive() {
     if (!Drive.configured()) { toast('Google sign-in is not set up yet'); return false; }
     try {
-      await Drive.getToken(true); await Drive.folders();
+      Drive.token = null; await Drive.getToken(true); await Drive.list('photo');
       toast('Google Drive connected'); updateCloudChip(); renderOnboard(); flushQueue();
       return true;
-    } catch (e) { console.warn(e); alertMsg('Could not connect to Google'); return false; }
+    } catch (e) { console.warn(e); alertMsg('Could not connect to Google. ' + (e && e.message || '')); return false; }
   }
   async function saveItem(kind, blob, thumb, extra = {}) {
     const name = `${PREFIX[kind]}_${stamp()}.${extFor(blob.type)}`;
@@ -1461,8 +1461,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
   $('#keySave').addEventListener('click', saveKey);
   $('#keyInput').addEventListener('keydown', e => { if (e.key === 'Enter') saveKey(); });
   $('#cloud').addEventListener('click', () => {
-    if (!Drive.connected() || needReconnect) connectDrive();
-    else { flushQueue(); updateCloudChip(); toast('Google Drive is connected'); }
+    needReconnect = true; connectDrive().then(ok => { if (ok) { flushQueue(); loadGallery(); } });
   });
   $('#thumb').addEventListener('click', openGallery);
   $('#galBack').addEventListener('click', () => history.back());
