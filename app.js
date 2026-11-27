@@ -252,7 +252,7 @@
     if (!Drive.configured()) { toast('Google sign-in is not set up yet'); return false; }
     try {
       Drive.token = null; await Drive.getToken(true); await Drive.list('photo');
-      toast('Google Drive connected · v15'); updateCloudChip(); renderOnboard(); flushQueue();
+      toast('Google Drive connected · v16'); updateCloudChip(); renderOnboard(); flushQueue();
       return true;
     } catch (e) { console.warn(e); alertMsg('Could not connect to Google. ' + (e && e.message || '')); return false; }
   }
@@ -1140,6 +1140,7 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
     gal.qr = (await idb.all('qrlog').catch(() => [])).sort((a, b) => b.time - a.time);
     gal.loading = false; renderGallery(); updateCloudChip();
     if (gal.section === 'trash') loadTrash();
+    if (ok && !gal.items.length) { $('#thumb').classList.remove('has'); $('#thumbImg').removeAttribute('src'); }
     if (!$('#thumb').classList.contains('has') && gal.items[0]) { const img = new Image(); loadThumb(gal.items[0], $('#thumbImg'), 160).then(() => $('#thumb').classList.add('has')); }
   }
   async function loadThumb(it, img, size = 240) {
