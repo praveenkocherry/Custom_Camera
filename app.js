@@ -252,7 +252,7 @@
     if (!Drive.configured()) { toast('Google sign-in is not set up yet'); return false; }
     try {
       Drive.token = null; await Drive.getToken(true); await Drive.list('photo');
-      toast('Google Drive connected · v22'); updateCloudChip(); renderOnboard(); flushQueue();
+      toast('Google Drive connected'); updateCloudChip(); renderOnboard(); flushQueue();
       return true;
     } catch (e) { console.warn(e); alertMsg('Could not connect to Google. ' + (e && e.message || '')); return false; }
   }

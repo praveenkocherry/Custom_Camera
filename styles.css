@@ -252,3 +252,11 @@ body.recording #recBtn .rdot.big { background: #e5342c; border-radius: 8px; }
 #zoomChip, #recChip { font-size: 22px; }
 #hint { width: max-content; max-width: 88vw; }
 #obSecondary:empty { display: none; }
+#ver { position: fixed; left: 0; right: 0; bottom: calc(var(--safe-b) + 2px); z-index: 5; text-align: center; font-size: 12px; letter-spacing: .08em; color: rgba(255,255,255,.5); pointer-events: none; }
+#gallery:not([hidden]) ~ #ver, #viewer:not([hidden]) ~ #ver { display: none; }
+#bottom { padding-bottom: calc(var(--safe-b) + 28px); }
+#opts { bottom: calc(var(--safe-b) + 164px); }
+#ver { bottom: calc(var(--safe-b) + 6px); font-size: 13px; color: rgba(255,255,255,.6); }
+#bottom { padding-bottom: calc(var(--safe-b) + 40px); }
+#opts { bottom: calc(var(--safe-b) + 176px); }
+#ver { bottom: calc(var(--safe-b) + 8px); }
