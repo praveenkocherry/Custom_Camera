@@ -252,7 +252,7 @@
     if (!Drive.configured()) { toast('Google sign-in is not set up yet'); return false; }
     try {
       Drive.token = null; await Drive.getToken(true); await Drive.list('photo');
-      toast('Google Drive connected · v21'); updateCloudChip(); renderOnboard(); flushQueue();
+      toast('Google Drive connected · v22'); updateCloudChip(); renderOnboard(); flushQueue();
       return true;
     } catch (e) { console.warn(e); alertMsg('Could not connect to Google. ' + (e && e.message || '')); return false; }
   }
@@ -1413,13 +1413,24 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
   const needInstall = () => !isStandalone() && !sessionStorage.getItem('cc_skip_install');
   const needConnect = () => !Drive.connected() && !sessionStorage.getItem('cc_skip_drive');
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; renderOnboard(); });
-  window.addEventListener('appinstalled', () => { deferredInstall = null; toast('Installed. Open it from your home screen'); renderOnboard(); });
+  let justInstalled = false;
+  const INSTALLED_MSG = 'Custom Camera is installed. Find it in your app list and on your home screen, and open it from there. You can also keep using it here in Chrome.';
+  function markInstalled() {
+    if (justInstalled || isStandalone()) return;
+    justInstalled = true; deferredInstall = null; renderOnboard();
+    try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(INSTALLED_MSG); u.lang = navigator.language || 'en-IN'; speechSynthesis.speak(u); } catch { }
+  }
+  window.addEventListener('appinstalled', markInstalled);
   function renderOnboard() {
-    const step = needInstall() ? 'install' : needConnect() ? 'connect' : null;
+    const step = justInstalled ? 'done' : needInstall() ? 'install' : needConnect() ? 'connect' : null;
     const box = $('#onboard');
     if (!step) { box.hidden = true; return; }
     box.hidden = false; box.dataset.step = step;
-    if (step === 'install') {
+    if (step === 'done') {
+      $('#obTitle').textContent = 'Installed';
+      $('#obText').textContent = INSTALLED_MSG;
+      $('#obPrimary').textContent = 'Continue here'; $('#obSecondary').textContent = '';
+    } else if (step === 'install') {
       $('#obTitle').textContent = 'Install Custom Camera';
       $('#obText').textContent = deferredInstall ? 'Add it to your home screen so it opens like a normal app, full screen.' : 'Open the Chrome menu (three dots) and choose Install app. This goes away once it is installed.';
       $('#obPrimary').textContent = 'Install app'; $('#obSecondary').textContent = 'Not now';
@@ -1434,9 +1445,10 @@ Rules: For a visiting card or similar, put each detail in fields using labels su
   $('#onboard').addEventListener('click', e => e.stopPropagation());
   $('#obPrimary').addEventListener('click', async () => {
     const step = $('#onboard').dataset.step;
+    if (step === 'done') { justInstalled = false; sessionStorage.setItem('cc_skip_install', '1'); renderOnboard(); return; }
     if (step === 'install') {
       if (!deferredInstall) { toast('Use the Chrome menu, then Install app'); return; }
-      deferredInstall.prompt(); await deferredInstall.userChoice.catch(() => ({})); deferredInstall = null; renderOnboard();
+      deferredInstall.prompt(); const ch = await deferredInstall.userChoice.catch(() => ({})); deferredInstall = null; if (ch && ch.outcome === 'accepted') markInstalled(); else renderOnboard();
     } else connectDrive();
   });
   $('#obSecondary').addEventListener('click', () => { sessionStorage.setItem($('#onboard').dataset.step === 'install' ? 'cc_skip_install' : 'cc_skip_drive', '1'); renderOnboard(); });
